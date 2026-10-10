@@ -1,0 +1,1 @@
+<network-security-config><base-config cleartextTrafficPermitted="false"/><domain-config cleartextTrafficPermitted="true"><domain includeSubdomains="false">jw.gzist.edu.cn</domain></domain-config></network-security-config>

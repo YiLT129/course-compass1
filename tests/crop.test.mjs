@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {cropRect} from '../dist/core/crop.js';
+test('preview/export crop stays inside image at every ratio, zoom and edge',()=>{for(const ratio of [9/16,3/4,1,16/9])for(const zoom of [1,2,4])for(const x of [0,.5,1])for(const y of [0,.5,1]){const r=cropRect(900,1400,ratio,zoom,x,y);assert(Math.abs(r.w/r.h-ratio)<1e-8);assert(r.x>=0&&r.y>=0&&r.x+r.w<=900.0001&&r.y+r.h<=1400.0001);}});
+test('full portrait crop retains all pixels, centered square and zoom export match',()=>{assert.deepEqual(cropRect(900,1400,9/14),{x:0,y:0,w:900,h:1400});assert.deepEqual(cropRect(900,1400,1,2),{x:225,y:475,w:450,h:450});});

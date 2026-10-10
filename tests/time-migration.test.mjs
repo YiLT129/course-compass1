@@ -1,0 +1,8 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {DEFAULT_TIMES,LEGACY_TIMES,validateSettings,toICS} from '../dist/core/model.js';
+import {migrateSchoolTimes} from '../dist/core/storage.js';
+const store=value=>{let raw=JSON.stringify(value);return {getItem:()=>raw,setItem:(key,v)=>raw=v};};
+const base={version:1,courses:[{id:'a',name:'作息测试',day:1,start:1,end:2,weeks:[1]}],settings:{startDate:'2026-08-31',totalWeeks:16,term:'test',times:LEGACY_TIMES},demo:false,extra:'preserve'};
+test('截图作息：第一节、晚课以及21点衔接，日历使用一致钟点',()=>{assert.equal(validateSettings().times[0],'08:20-09:05');assert.equal(DEFAULT_TIMES[8],'18:40-19:25');assert.equal(DEFAULT_TIMES[9],'19:35-20:00');assert.equal(DEFAULT_TIMES[10],'20:20-21:00');assert.equal(DEFAULT_TIMES[11],'21:00-21:40');const ics=toICS(base.courses,validateSettings({...base.settings,times:DEFAULT_TIMES}));assert.match(ics,/DTSTART:20260831T002000Z/);assert.match(ics,/DTEND:20260831T020000Z/);});
+test('只迁移旧默认作息，保留课程、学期和其他字段，重复启动不重写',()=>{const storage=store(base);assert.equal(migrateSchoolTimes(storage),true);const result=JSON.parse(storage.getItem());assert.deepEqual(result,{...base,settings:{...base.settings,times:DEFAULT_TIMES}});assert.equal(migrateSchoolTimes(storage),false);});
+test('不覆盖手动作息，不写入损坏的旧课表',()=>{const custom=[...LEGACY_TIMES];custom[0]='08:10-08:45';const storage=store({...base,settings:{...base.settings,times:custom}});const before=storage.getItem();assert.equal(migrateSchoolTimes(storage),false);assert.equal(storage.getItem(),before);const bad=store({...base,version:99});const damaged=bad.getItem();assert.throws(()=>migrateSchoolTimes(bad));assert.equal(bad.getItem(),damaged);});
