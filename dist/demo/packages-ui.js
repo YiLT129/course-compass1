@@ -9,7 +9,7 @@ async function decodeAssets(value){async function check(imageBlob){if(!imageBlob
 export async function captureBackup(){
  const state={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(allowedKey(k))state[k]=localStorage.getItem(k);}
  if(window.CourseCompass?.getWidgetConfigs){const widgets=JSON.parse(window.CourseCompass.getWidgetConfigs());if(widgets.length)state['course-compass.widget-presets.v1']=JSON.stringify(widgets);}
- const {images,themes}=await readAssets();return validatePackage({format:'course-compass.backup',version:1,appVersion:'0.4.0',createdAt:new Date().toISOString(),state,assets:{wallpaper:await resource(images.wallpaper),original:await resource(images.original)},themes});
+ const {images,themes}=await readAssets();return validatePackage({format:'course-compass.backup',version:1,appVersion:'0.4.1',createdAt:new Date().toISOString(),state,assets:{wallpaper:await resource(images.wallpaper),original:await resource(images.original)},themes});
 }
 export function setupPackages({notify,openSheet,refreshAppearance}){
  let pending=null,pendingURL=null,busy=false;

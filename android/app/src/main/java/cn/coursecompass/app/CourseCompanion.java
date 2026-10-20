@@ -49,9 +49,9 @@ final class CourseCompanion {
   long midnight=now.toLocalDate().plusDays(1).atStartOfDay(ScheduleEngine.ZONE).toInstant().toEpochMilli();if(d.refreshAt==0||d.refreshAt>midnight)d.refreshAt=midnight;
   List<ScheduleEngine.Entry> list=!result.current.isEmpty()?result.current:result.next;
   if(!list.isEmpty()){
-   ScheduleEngine.Entry first=list.get(0);boolean current=!result.current.isEmpty();d.label=current?"正在上课":first.start.toLocalDate().equals(now.toLocalDate())?"下一节课":"下一次上课";
-   d.title=join(list,false);d.detail=first.start.format(DateTimeFormatter.ofPattern("M月d日 HH:mm"))+"–"+first.end.format(DateTimeFormatter.ofPattern("HH:mm"))+" · "+join(list,true);
-   if(current&&!result.next.isEmpty()){ScheduleEngine.Entry next=result.next.get(0);d.following="下一节 "+next.start.format(DateTimeFormatter.ofPattern("M月d日 HH:mm"))+" · "+join(result.next,false);}
+   ScheduleEngine.Entry first=list.get(0);boolean current=!result.current.isEmpty();d.label=current?"正在上课":result.onBreak?"课间休息 · 下一节":first.start.toLocalDate().equals(now.toLocalDate())?"下一节课":"下一次上课";
+   d.title=join(list,false);d.detail="第"+first.period+"节 · "+first.start.format(DateTimeFormatter.ofPattern("M月d日 HH:mm"))+"–"+first.end.format(DateTimeFormatter.ofPattern("HH:mm"))+" · "+join(list,true);
+   if(current&&!result.next.isEmpty()){ScheduleEngine.Entry next=result.next.get(0);d.following="下一节 第"+next.period+"节 "+next.start.format(DateTimeFormatter.ofPattern("M月d日 HH:mm"))+" · "+join(result.next,false);}
    else if(list.size()>1)d.following="有 "+list.size()+" 条时间重叠的安排，请核对";
   }else if(!s.courses.isEmpty()){d.label="这几天没有课";d.title="留一点时间，给喜欢的事";d.detail="未来7天暂无安排 · 点击查看完整课表";}
   } JSONObject widget=override!=null?override:text==null?null:new JSONObject(text).optJSONObject("widget");if(widget!=null){String style=widget.optString("style","glass"),content=widget.optString("content","course");if(Arrays.asList("glass","pixel","record").contains(style))d.style=style;if(Arrays.asList("course","date","quote").contains(content))d.content=content;

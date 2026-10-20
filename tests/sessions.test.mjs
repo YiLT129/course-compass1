@@ -1,0 +1,15 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validateCourse,validateSettings,DEFAULT_TIMES} from '../dist/core/model.js';
+import {sessionsFor,scheduleClock} from '../dist/core/sessions.js';
+const settings=validateSettings({startDate:'2026-08-31',totalWeeks:16});
+const course=(extra={})=>validateCourse({id:'electrical',name:'电力系统分析',day:1,start:1,end:2,weeks:[1,3],location:'A101',...extra});
+const clock=(time,courses=[course()],config=settings)=>scheduleClock(courses,config,new Date(time));
+test('连排仅在展示层拆成独立节次，ID、周次及源课表保持不变',()=>{const original=course(),before=JSON.stringify(original),list=sessionsFor([original],1);assert.deepEqual(list.map(c=>[c.id,c.period,c.start,c.end,c.sourceStart,c.sourceEnd]),[['electrical',1,1,1,1,2],['electrical',2,2,2,1,2]]);assert.notEqual(list[0].sessionKey,list[1].sessionKey);assert.equal(JSON.stringify(original),before);assert.equal(sessionsFor([original],2).length,0);});
+test('第1节按08:20开始、09:05结束；课间不能算作正在上课',()=>{assert.equal(clock('2026-08-31T08:19:59').current.length,0);assert.equal(clock('2026-08-31T08:20:00').current[0].period,1);assert.equal(clock('2026-08-31T09:04:59').current[0].period,1);const gap=clock('2026-08-31T09:05:00');assert.equal(gap.current.length,0);assert.equal(gap.onBreak,true);assert.equal(gap.next[0].period,2);assert.equal(gap.next[0].time,'09:15–10:00');});
+test('下一节开始切换到第2节，10点后不继续显示已结束课程',()=>{assert.equal(clock('2026-08-31T09:15:00').current[0].period,2);assert.equal(clock('2026-08-31T09:59:59').current[0].period,2);assert.equal(clock('2026-08-31T10:00:00').current.length,0);assert.equal(clock('2026-08-31T10:00:00').onBreak,false);});
+test('晚课21:00相接时只高亮第12节',()=>{const r=clock('2026-08-31T21:00:00',[course({start:11,end:12})]);assert.equal(r.current.length,1);assert.equal(r.current[0].period,12);assert.equal(r.current[0].time,'21:00–21:40');});
+test('使用已保存的自定义作息，不依赖默认8点20',()=>{const times=[...DEFAULT_TIMES];times[0]='08:00-08:45';times[1]='08:55-09:40';const custom=validateSettings({...settings,times});assert.equal(clock('2026-08-31T08:01:00',[course()],custom).current[0].period,1);assert.equal(clock('2026-08-31T08:50:00',[course()],custom).onBreak,true);});
+test('单双周、星期、学期边界及无课程时不伪造当前课程',()=>{assert.equal(clock('2026-09-07T08:30:00').current.length,0);assert.equal(clock('2026-09-01T08:30:00').current.length,0);assert.equal(clock('2026-08-30T08:30:00').withinTerm,false);assert.equal(clock('2026-12-21T08:30:00',[course({weeks:[17]})]).next.length,0);assert.equal(clock('2026-08-31T08:30:00',[]).current.length,0);});
+test('周日正确找到周一的第1节，周末课程也按节判断',()=>{const sunday=clock('2026-09-06T23:59:00',[course({weeks:[2]})]);assert.equal(sunday.next[0].date,'2026-09-07');assert.equal(sunday.next[0].period,1);assert.equal(clock('2026-09-05T14:05:00',[course({day:6,start:5,end:6})]).current[0].period,5);});
+test('重叠安排同时保留，不随意选一门覆盖',()=>{const r=clock('2026-08-31T09:20:00',[course(),course({id:'other',name:'另一门课程',start:2,end:3})]);assert.equal(r.current.length,2);assert.deepEqual(new Set(r.current.map(c=>c.period)),new Set([2]));});

@@ -4,7 +4,8 @@
 
 ## 功能
 
-- 一屏五天/七天课表、课程详情与搜索、今日安排、个人安排、学期与作息设置。
+- 一屏五天/七天课表，连排课程按单个节次显示；按本机时间与已保存作息显示当前课、课间和下一节。
+- 课程详情与搜索、今日安排、个人安排、学期与作息设置。
 - 自选壁纸、比例裁剪、拖动缩放、深浅主题；设置保存在设备内。
 - 贴纸、留言、倒数日、HTTPS快捷入口；拖动摆放、缩放旋转、图层、锁定、撤销重做、自动对齐；重启保留。
 - 简洁玻璃 / 像素时钟 / 唱片卡片，选择课程、时间日期或一句话；可显示在应用内和Android桌面。
@@ -50,7 +51,7 @@ cd android
 gradle :app:assembleDebug
 ```
 
-也可在Android Studio打开 `android/`，配置SDK与Gradle。当前没有分发Gradle wrapper二进制。输出 `android/app/build/outputs/apk/debug/app-debug.apk`。最低Android8；版本0.4.0（15）。正式分发应使用自己的签名密钥。旧安装更新需同包名、同证书及更高版本号；卸载可能删除本机数据。
+也可在Android Studio打开 `android/`，配置SDK与Gradle。当前没有分发Gradle wrapper二进制。输出 `android/app/build/outputs/apk/debug/app-debug.apk`。最低Android8；版本0.4.1（16）。正式分发应使用自己的签名密钥。旧安装更新需同包名、同证书及更高版本号；卸载可能删除本机数据。
 
 ```sh
 python scripts/verify-apk-startup.py android/app/build/outputs/apk/debug/app-debug.apk

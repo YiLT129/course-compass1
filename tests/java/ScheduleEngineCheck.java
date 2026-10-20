@@ -19,6 +19,9 @@ public class ScheduleEngineCheck {
   check(run(List.of(c("过期",1,1,2,17)),"2026-12-21T08:20").current.isEmpty(),"after semester");
   check(run(List.of(c("周末",6,5,6,1)),"2026-09-05T14:00").current.size()==1,"weekend");
   check(run(List.of(),"2026-09-05T14:00").next.isEmpty(),"empty");
-  System.out.println("PASS: 12 native clock/week cases, including exact start/end, evening adjacency, weekly rollover, parity, conflicts and term limits");
+  var gap=run(courses,"2026-08-31T09:05");check(gap.current.isEmpty()&&gap.onBreak&&gap.next.get(0).period==2,"break between split periods");
+  check(run(courses,"2026-08-31T09:15").current.get(0).period==2,"second period transition");
+  check(run(courses,"2026-08-31T09:04").current.get(0).end.toLocalTime().equals(LocalTime.parse("09:05")),"period end excludes break");
+  System.out.println("PASS: 15 native clock/week cases including split periods, break boundaries and next period");
  }
 }

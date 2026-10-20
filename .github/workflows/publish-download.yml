@@ -3,12 +3,12 @@ on:
   push:
     branches: [main]
     paths:
-      - 'release-assets/0.4.0/**'
+      - 'release-assets/0.4.1/**'
   workflow_dispatch:
 permissions:
   contents: write
 concurrency:
-  group: publish-download-v0.4.0
+  group: publish-download-v0.4.1
   cancel-in-progress: false
 jobs:
   release:
@@ -19,19 +19,19 @@ jobs:
         with:
           persist-credentials: false
       - name: Verify signed download
-        working-directory: release-assets/0.4.0
+        working-directory: release-assets/0.4.1
         run: sha256sum --check SHA256SUMS.txt
-      - name: Publish v0.4.0 download
+      - name: Publish v0.4.1 download
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
-          apk=release-assets/0.4.0/course-compass-0.4.0-android.apk
-          sums=release-assets/0.4.0/SHA256SUMS.txt
-          if gh release view v0.4.0 --repo "$GH_REPO" >/dev/null 2>&1; then
-            echo "Release v0.4.0 already exists; keep existing published assets."
+          apk=release-assets/0.4.1/course-compass-0.4.1-android.apk
+          sums=release-assets/0.4.1/SHA256SUMS.txt
+          if gh release view v0.4.1 --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "Release v0.4.1 already exists; keep existing published assets."
             exit 0
           fi
-          gh release create v0.4.0 "$apk" "$sums" --repo "$GH_REPO" --target "$RELEASE_COMMIT" --title "课间 v0.4.0 · Android 预览版" --notes-file release-assets/0.4.0/NOTES.md --prerelease
+          gh release create v0.4.1 "$apk" "$sums" --repo "$GH_REPO" --target "$RELEASE_COMMIT" --title "课间 v0.4.1 · Android 预览版" --notes-file release-assets/0.4.1/NOTES.md --prerelease

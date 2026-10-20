@@ -5,3 +5,5 @@
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 
 .course-row{text-align:left}
+
+.grid-course.is-current{outline:2px solid var(--accent,#368bc1);outline-offset:-2px}
