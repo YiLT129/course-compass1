@@ -57,6 +57,8 @@ public class MainActivity extends Activity {
  private String gradeState="waiting",gradeReason="尚未查询成绩",gradeSource="未识别";
  private int gradePageRecords=0;
  private String pendingExport;
+ private byte[] pendingBinary;
+ private int widgetToConfigure=0;
  private TextView portalStatus;
  private Button readButton;
  private TextView gradeScopeLabel;
@@ -66,6 +68,7 @@ public class MainActivity extends Activity {
  private int readGeneration=0,capturedFrames=0,capturedRequests=0;
  private final java.util.ArrayList<androidx.webkit.JavaScriptReplyProxy> schoolFrameReplies=new java.util.ArrayList<>();
  private boolean syncing=false,replayed=false;
+ private int syncRetries=0;
 
  private final Handler handler=new Handler(Looper.getMainLooper());
  private ValueCallback<Uri[]> fileCallback;
@@ -76,6 +79,8 @@ public class MainActivity extends Activity {
 
  @Override public void onCreate(Bundle state) {
   super.onCreate(state);
+  widgetToConfigure=getIntent().getIntExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID,0);
+  if(android.appwidget.AppWidgetManager.ACTION_APPWIDGET_CONFIGURE.equals(getIntent().getAction()))setResult(RESULT_CANCELED);
   if(Build.VERSION.SDK_INT>=33){appBackCallback=this::handleAppBack;getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,appBackCallback);}
   bundledAssets=getAssets();
   getWindow().setStatusBarColor(Color.rgb(218,233,241));
@@ -104,6 +109,7 @@ public class MainActivity extends Activity {
   });
 
   appView.setWebViewClient(new WebViewClient(){
+   @Override public void onPageFinished(WebView view,String url){if(view==appView&&widgetToConfigure>0)openWidgetWhenReady(0);}
    @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
     Uri uri=request.getUrl();if(APP_HOST.equals(uri.getHost())&&"https".equals(uri.getScheme()))return false;
     openExternal(uri);return true;
@@ -127,7 +133,7 @@ public class MainActivity extends Activity {
  }
  private void showStartupError(String stage,Exception error){
   Log.e("CourseCompassStartup",stage,error);
-  String details="课间 0.3.0 · 启动诊断\n\n阶段："+stage+"\n设备："+Build.MANUFACTURER+" "+Build.MODEL+" / Android "+Build.VERSION.RELEASE+"\n错误："+error.getClass().getName()+"\n"+String.valueOf(error.getMessage());
+  String details="课间 0.4.0 · 启动诊断\n\n阶段："+stage+"\n设备："+Build.MANUFACTURER+" "+Build.MODEL+" / Android "+Build.VERSION.RELEASE+"\n错误："+error.getClass().getName()+"\n"+String.valueOf(error.getMessage());
   for(StackTraceElement frame:error.getStackTrace())if(frame.getClassName().startsWith("cn.coursecompass"))details+="\n"+frame.toString();
   LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(28,100,28,40);
   TextView title=new TextView(this);title.setText("应用启动遇到问题");title.setTextSize(21);box.addView(title);
@@ -148,6 +154,12 @@ public class MainActivity extends Activity {
 
  private final class AppBridge {
   @JavascriptInterface public boolean setSchool(String text){try{if(text==null||text.length()>10000)return false;SchoolConfig next=SchoolConfig.parse(text);if(!getSharedPreferences("school-config",MODE_PRIVATE).edit().putString("selected",text).commit())return false;applySchool(next);runOnUiThread(()->{if(portalDialog!=null&&portalDialog.isShowing())portalDialog.dismiss();});return true;}catch(Exception error){return false;}}
+  @JavascriptInterface public void haptic(){runOnUiThread(()->{if(appView!=null)appView.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);});}
+  @JavascriptInterface public String getWidgetConfigs(){return CourseCompanion.configs(MainActivity.this);}
+  @JavascriptInterface public boolean setWidgetConfig(int id,String text){boolean ok=CourseCompanion.saveConfig(MainActivity.this,id,text);if(ok&&id==widgetToConfigure&&android.appwidget.AppWidgetManager.ACTION_APPWIDGET_CONFIGURE.equals(getIntent().getAction()))runOnUiThread(()->{setResult(RESULT_OK,new Intent().putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID,id));finish();});return ok;}
+  @JavascriptInterface public void openLink(String url){if(url!=null&&url.length()<4000)runOnUiThread(()->openExternal(Uri.parse(url)));}
+  @JavascriptInterface public void saveImage(String name,String data){try{byte[] bytes=decodePng(data);startExport(name,"image/png",null,bytes);}catch(Exception e){runOnUiThread(()->Toast.makeText(MainActivity.this,"图片无法保存："+e.getMessage(),Toast.LENGTH_LONG).show());}}
+  @JavascriptInterface public void shareImage(String data){try{byte[] bytes=decodePng(data);runOnUiThread(()->sharePng(bytes));}catch(Exception e){runOnUiThread(()->Toast.makeText(MainActivity.this,"图片无法分享："+e.getMessage(),Toast.LENGTH_LONG).show());}}
   @JavascriptInterface public String getCompanionStatus(){return CourseCompanion.status(MainActivity.this);}
   @JavascriptInterface public void updateSchedule(String text){runOnUiThread(()->{try{CourseCompanion.update(MainActivity.this,text);}catch(Exception error){companionChanged("课程卡片同步失败，请检查学期与作息");}});}
   @JavascriptInterface public void setCompanionEnabled(boolean value){runOnUiThread(()->{
@@ -162,10 +174,16 @@ public class MainActivity extends Activity {
   @JavascriptInterface public void syncPortal(){runOnUiThread(()->{gradeMode=false;profileMode=false;showPortal(true);});}
   @JavascriptInterface public void openGrades(int year,int term){if(year<2000||year>2099||term!=3&&term!=12&&term!=16)return;runOnUiThread(()->{if(portalDialog!=null&&portalDialog.isShowing())return;gradeMode=true;profileMode=false;gradeYear=year;gradeTerm=term;showPortal(false);});}
   @JavascriptInterface public void saveFile(String name,String mime,String content){
-   if(content==null||content.length()>8_000_000)return;
-   runOnUiThread(()->{if(pendingExport!=null){Toast.makeText(MainActivity.this,"请先完成当前导出",Toast.LENGTH_SHORT).show();return;}pendingExport=content;Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("text/calendar".equals(mime)?"text/calendar":"application/json");intent.putExtra(Intent.EXTRA_TITLE,name.replaceAll("[\\\\/]","_"));try{startActivityForResult(intent,41);}catch(Exception ignored){pendingExport=null;Toast.makeText(MainActivity.this,"无法打开文件保存窗口",Toast.LENGTH_LONG).show();}});
+   if(content==null)return;if(content.length()>70_000_000){runOnUiThread(()->Toast.makeText(MainActivity.this,"备份文件过大，请减少图片后重试",Toast.LENGTH_LONG).show());return;}
+   startExport(name,"text/calendar".equals(mime)?"text/calendar":"application/json",content,null);
   }
+
  }
+ private void startExport(String name,String mime,String content,byte[] binary){runOnUiThread(()->{if(pendingExport!=null||pendingBinary!=null){Toast.makeText(this,"请先完成当前导出",Toast.LENGTH_SHORT).show();return;}pendingExport=content;pendingBinary=binary;Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mime).putExtra(Intent.EXTRA_TITLE,(name==null?"课间导出":name).replaceAll("[\\\\/]","_"));try{startActivityForResult(intent,41);}catch(Exception e){pendingExport=null;pendingBinary=null;Toast.makeText(this,"无法打开文件保存窗口",Toast.LENGTH_LONG).show();}});}
+ private byte[] decodePng(String data)throws Exception{if(data==null||data.length()>22_000_000)throw new Exception("图片超过16MB");byte[] bytes=android.util.Base64.decode(data,android.util.Base64.DEFAULT);byte[] magic={(byte)137,80,78,71,13,10,26,10};if(bytes.length<magic.length)throw new Exception("PNG格式无效");for(int i=0;i<magic.length;i++)if(bytes[i]!=magic[i])throw new Exception("PNG格式无效");return bytes;}
+ private void sharePng(byte[] bytes){try{java.io.File folder=new java.io.File(getCacheDir(),"shared");if(!folder.exists()&&!folder.mkdirs())throw new Exception("缓存目录不可用");java.io.File[] old=folder.listFiles();if(old!=null)for(java.io.File f:old)if(f.lastModified()<System.currentTimeMillis()-86400000L)f.delete();java.io.File file=new java.io.File(folder,"course-compass-"+System.currentTimeMillis()+".png");try(OutputStream out=new java.io.FileOutputStream(file)){out.write(bytes);}Uri uri=androidx.core.content.FileProvider.getUriForFile(this,getPackageName()+".images",file);Intent intent=new Intent(Intent.ACTION_SEND).setType("image/png").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);intent.setClipData(android.content.ClipData.newRawUri("课表海报",uri));startActivity(Intent.createChooser(intent,"分享我的一周"));}catch(Exception e){Toast.makeText(this,"未能打开分享，请尝试保存PNG",Toast.LENGTH_LONG).show();}}
+ private void openWidgetWhenReady(int attempt){if(appView==null||widgetToConfigure<=0||attempt>30||!CourseCompanion.owns(this,widgetToConfigure))return;appView.evaluateJavascript("typeof window.openWidgetEditor==='function'",ready->{if("true".equals(ready)){appView.evaluateJavascript("window.openWidgetEditor("+widgetToConfigure+")",null);}else handler.postDelayed(()->openWidgetWhenReady(attempt+1),150);});}
+ @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);widgetToConfigure=intent.getIntExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID,0);if(widgetToConfigure>0)openWidgetWhenReady(0);}
  private void companionChanged(String message){if(appView!=null)appView.evaluateJavascript("window.onNativeCompanionChanged&&window.onNativeCompanionChanged("+JSONObject.quote(message)+")",null);}
  @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results){super.onRequestPermissionsResult(requestCode,permissions,results);if(requestCode==63){boolean granted=results.length>0&&results[0]==android.content.pm.PackageManager.PERMISSION_GRANTED;CourseCompanion.enabled(this,granted);companionChanged(granted?"课程通知已开启，请允许锁屏显示":"未获得通知权限，桌面课程卡片仍可使用");}}
  @Override protected void onResume(){super.onResume();CourseCompanion.refresh(this);companionChanged("");}
@@ -184,12 +202,12 @@ public class MainActivity extends Activity {
   });
  }
  private Button button(String title,Runnable action){Button b=new Button(this);b.setText(title);b.setTextSize(13);b.setAllCaps(false);b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(0);b.setMinimumHeight(0);b.setPadding(dp(8),0,dp(8),0);b.setOnClickListener(v->action.run());return b;}
- private void status(String message,boolean failed){if(portalStatus!=null){portalStatus.setText(message);portalStatus.setTextColor(failed?Color.rgb(159,58,51):Color.rgb(57,91,112));}if(recoveryActions!=null)recoveryActions.setVisibility(failed?View.VISIBLE:View.GONE);}
+ private void status(String message,boolean failed){if(syncing&&!gradeMode&&!profileMode&&appView!=null)appView.evaluateJavascript("window.onSchoolSyncStatus&&window.onSchoolSyncStatus("+JSONObject.quote(message)+")",null);if(portalStatus!=null){portalStatus.setText(message);portalStatus.setTextColor(failed?Color.rgb(159,58,51):Color.rgb(57,91,112));}if(recoveryActions!=null)recoveryActions.setVisibility(failed?View.VISIBLE:View.GONE);}
  private void finishRead(String message){if(gradeMode){gradeReason=message;if(!"blocked".equals(gradeState)&&!"login".equals(gradeState))gradeState="failed";}readGeneration++;reading=false;gradeDelivering=false;if(readButton!=null){readButton.setEnabled(true);readButton.setText(gradeMode?"读取成绩":profileMode?"读取身份":"读取课表");}status(message,true);}
  private void showPortal(boolean sync){
   if(!"zfsoft".equals(schoolConfig.adapter)){if(!schoolConfig.login.isEmpty())openExternal(Uri.parse(schoolConfig.login));else Toast.makeText(this,"请使用通用表格导入课表",Toast.LENGTH_LONG).show();return;}
   if(portalDialog!=null&&portalDialog.isShowing())return;
-  gradeScopeKnown=false;gradeState="waiting";gradeReason="尚未查询成绩";syncing=sync;forceRead=sync;replayed=false;reading=false;readGeneration++;capturedTimetable=null;capturedQuery=null;capturedFrames=0;capturedRequests=0;schoolFrameReplies.clear();
+  syncRetries=0;gradeScopeKnown=false;gradeState="waiting";gradeReason="尚未查询成绩";syncing=sync;forceRead=sync;replayed=false;reading=false;readGeneration++;capturedTimetable=null;capturedQuery=null;capturedFrames=0;capturedRequests=0;schoolFrameReplies.clear();
   portalDialog=new Dialog(this,android.R.style.Theme_Material_Light_NoActionBar);
   LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(Color.rgb(245,249,252));
   LinearLayout toolbar=new LinearLayout(this);toolbar.setPadding(dp(6),dp(4),dp(6),dp(4));
@@ -224,13 +242,13 @@ public class MainActivity extends Activity {
     if(gradeMode&&"gradesError".equals(type)){if(!reading||packet.optInt("requestId",-1)!=readGeneration)return;gradeReason=packet.optString("reason","成绩读取失败");finishRead(gradeReason);schoolStatus("failed",gradeReason);return;}
     if(gradeMode&&reading&&"grades".equals(type)){if(packet.optInt("requestId",-1)!=readGeneration)return;deliverGrades(packet.getJSONObject("data"),readGeneration);return;}
     if(gradeMode||profileMode)return;
-    if("timetable".equals(type)){if(reading&&!packet.optBoolean("readResult"))return;JSONObject data=packet.getJSONObject("data");if(data.getJSONArray("kbList").length()==0)return;capturedTimetable=data;capturedQuery=packet.optJSONObject("query");status("已捕获 "+data.getJSONArray("kbList").length()+" 条排课，点「读取课表」核对后导入。",false);}
+    if("timetable".equals(type)){if(reading&&!packet.optBoolean("readResult"))return;JSONObject data=packet.getJSONObject("data");if(data.getJSONArray("kbList").length()==0)return;capturedTimetable=data;capturedQuery=packet.optJSONObject("query");status("已捕获 "+data.getJSONArray("kbList").length()+" 条排课，点「读取课表」核对后导入。",false);if(syncing&&!reading&&syncRetries<3){syncRetries++;readPortal();}}
    }catch(Exception error){status("学校返回的数据未能识别，请在学期课表重新查询。",true);}
   });
   if(earlyCollector)WebViewCompat.addDocumentStartJavaScript(portalView,collectorScript+"\n"+gradeScript,schoolOrigins);
   portalView.setWebViewClient(new WebViewClient(){
    @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){if(isOfficial(request.getUrl().toString()))return false;openExternal(request.getUrl());return true;}
-   @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon){if(view!=portalView)return;capturedTimetable=null;capturedQuery=null;capturedFrames=0;capturedRequests=0;gradeSource="未识别";gradePageRecords=0;gradeScopeKnown=false;if(gradeScopeLabel!=null)gradeScopeLabel.setText("自动跟随学校页面 · 正在识别学期");schoolFrameReplies.clear();readGeneration++;reading=false;gradeDelivering=false;readButton.setEnabled(true);readButton.setText(gradeMode?"读取成绩":profileMode?"读取身份":"读取课表");status(gradeMode?"页面加载中…登录后可读取所选学期成绩。":profileMode?"页面加载中…登录后进入个人信息，再点读取身份。":"页面加载中…登录后选择学期课表，再点「读取课表」。",false);}
+   @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon){if(view!=portalView)return;if(syncing)replayed=false;capturedTimetable=null;capturedQuery=null;capturedFrames=0;capturedRequests=0;gradeSource="未识别";gradePageRecords=0;gradeScopeKnown=false;if(gradeScopeLabel!=null)gradeScopeLabel.setText("自动跟随学校页面 · 正在识别学期");schoolFrameReplies.clear();readGeneration++;reading=false;gradeDelivering=false;readButton.setEnabled(true);readButton.setText(gradeMode?"读取成绩":profileMode?"读取身份":"读取课表");status(gradeMode?"页面加载中…登录后可读取所选学期成绩。":profileMode?"页面加载中…登录后进入个人信息，再点读取身份。":"页面加载中…登录后选择学期课表，再点「读取课表」。",false);}
    @Override public void onPageCommitVisible(WebView view,String url){if(isSchool(url))view.evaluateJavascript(collectorScript+"\n"+gradeScript,null);}
    @Override public void onPageFinished(WebView view,String url){
     if(view!=portalView)return;CookieManager.getInstance().flush();
@@ -239,7 +257,7 @@ public class MainActivity extends Activity {
      if(isSchool(url))view.evaluateJavascript(collectorScript+"\n"+gradeScript,ignored->{if(portalView==view)view.evaluateJavascript("JSON.stringify(window.__courseCompassGrades.inspect())",result->{if(portalView!=view)return;try{Object outer=new JSONTokener(result).nextValue();if(outer instanceof String)handleGradeState(new JSONObject((String)outer));}catch(Exception e){finishRead("无法识别学校页面，请回教务首页重新进入成绩查询。");}});});
      else{status("请在学校官方门户完成登录，再进入「成绩查询」。读取时自动跟随学校页面选择的学期。",false);schoolStatus("login","请在学校官方页面完成登录");}return;
     }
-    if(capturedTimetable==null)status("登录后打开学期课表并查询，再点「读取课表」。",false);
+    if(capturedTimetable==null)status(syncing?"登录完成后将继续本次课表同步，无需返回重新点击刷新。":"登录后打开学期课表并查询，再点「读取课表」。",false);
     if(isSchool(url))view.evaluateJavascript(collectorScript,ignored->{if(syncing&&!replayed){replayed=true;String saved=schoolPrefs().getString("query",null);if(saved==null){readPortal();return;}try{JSONObject query=new JSONObject(saved);String seed="(function(){var c=window.__courseCompassCollector;if(c)c.recipe="+query.toString()+";})()";view.evaluateJavascript(seed,done->readPortal());}catch(Exception error){readPortal();}}});
    }
    @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error){if(view==portalView&&request.isForMainFrame())finishRead("学校页面加载失败："+error.getDescription()+"。可点登录或教务首页重试。");}
@@ -270,7 +288,7 @@ public class MainActivity extends Activity {
   capturedTimetable=null;capturedQuery=null;portalView.evaluateJavascript("window.__compassReadResult=null",null);
   for(androidx.webkit.JavaScriptReplyProxy frame:schoolFrameReplies){try{frame.postMessage("{\"type\":\"read\",\"force\":"+forceRead+"}");}catch(Exception ignored){}}
   // Check the current school page and accessible school frames. Cross-origin frames use the origin-scoped message listener.
-  String probe="(function(){function scan(w){try{if(w.location.hostname==='jw.gzist.edu.cn'){w.eval("+JSONObject.quote(collectorScript)+");var c=w.__courseCompassCollector;if(c){c.obtain("+forceRead+").then(function(data){if(data)w.__compassReadResult={data:data,query:c.recipe};});}}for(var i=0;i<w.frames.length;i++){var r=scan(w.frames[i]);if(r)return r;}}catch(e){}return null;}return JSON.stringify(scan(window));})()";
+  String probe="(function(){function scan(w){try{if(w.location.hostname==="+JSONObject.quote(schoolConfig.host)+"){w.eval("+JSONObject.quote(collectorScript)+");var c=w.__courseCompassCollector;if(c){c.obtain("+forceRead+").then(function(data){if(data)w.__compassReadResult={data:data,query:c.recipe};});}}for(var i=0;i<w.frames.length;i++){var r=scan(w.frames[i]);if(r)return r;}}catch(e){}return null;}return JSON.stringify(scan(window));})()";
   portalView.evaluateJavascript(probe,result->{if(portalView==null||operation!=readGeneration)return;
    try{Object decoded=new JSONTokener(result).nextValue();if(decoded instanceof String){Object packet=new JSONTokener((String)decoded).nextValue();if(packet instanceof JSONObject){JSONObject obj=(JSONObject)packet;capturedTimetable=obj.getJSONObject("data");capturedQuery=obj.optJSONObject("query");}}}catch(Exception ignored){}
    pollRead(operation,System.currentTimeMillis()+12000);
@@ -332,10 +350,11 @@ public class MainActivity extends Activity {
  }
  private void copyPortalReport(){
   Uri uri=portalView==null?null:Uri.parse(portalView.getUrl()==null?"":portalView.getUrl());
-  String report="课间 0.3.0 · 读取诊断\n设备："+Build.MANUFACTURER+" "+Build.MODEL+" / Android "+Build.VERSION.RELEASE+"\n页面："+(uri==null?"未知":uri.getHost()+String.valueOf(uri.getPath()))+"\n提前采集："+earlyCollector+"\n受限帧消息："+frameMessages+"\n已注入页面数："+capturedFrames+"\n查询数："+capturedRequests+"\n捕获课表数据："+(capturedTimetable!=null)+"\n读取进行中："+reading+"\n同步学期：自动 · "+(gradeScopeKnown?gradeScope():"待识别学校页面")+"\n成绩页面状态："+gradeState+"\n成绩读取方式："+gradeSource+"\n页面识别门数："+gradePageRecords+"\n成绩读取说明："+gradeReason;
+  String report="课间 0.4.0 · 读取诊断\n设备："+Build.MANUFACTURER+" "+Build.MODEL+" / Android "+Build.VERSION.RELEASE+"\n页面："+(uri==null?"未知":uri.getHost()+String.valueOf(uri.getPath()))+"\n提前采集："+earlyCollector+"\n受限帧消息："+frameMessages+"\n已注入页面数："+capturedFrames+"\n查询数："+capturedRequests+"\n捕获课表数据："+(capturedTimetable!=null)+"\n读取进行中："+reading+"\n同步学期：自动 · "+(gradeScopeKnown?gradeScope():"待识别学校页面")+"\n成绩页面状态："+gradeState+"\n成绩读取方式："+gradeSource+"\n页面识别门数："+gradePageRecords+"\n成绩读取说明："+gradeReason;
   android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);clipboard.setPrimaryClip(android.content.ClipData.newPlainText("课间读取诊断",report));Toast.makeText(this,"诊断已复制，不包含验证码、Cookie 或课表内容",Toast.LENGTH_LONG).show();
  }
- @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==42){if(fileCallback!=null){fileCallback.onReceiveValue(result==RESULT_OK&&data!=null&&data.getData()!=null?new Uri[]{data.getData()}:null);fileCallback=null;}return;}if(request!=41)return;String content=pendingExport;pendingExport=null;if(result!=RESULT_OK||data==null||content==null)return;try(OutputStream stream=getContentResolver().openOutputStream(data.getData())){if(stream==null)throw new Exception();stream.write(content.getBytes(StandardCharsets.UTF_8));appView.evaluateJavascript("window.onNativeExportResult('文件已保存')",null);}catch(Exception ignored){appView.evaluateJavascript("window.onNativeExportResult('保存失败，请重试')",null);}}
+ @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==42){if(fileCallback!=null){fileCallback.onReceiveValue(result==RESULT_OK&&data!=null&&data.getData()!=null?new Uri[]{data.getData()}:null);fileCallback=null;}return;}if(request!=41)return;String content=pendingExport;byte[] bytes=pendingBinary;pendingExport=null;pendingBinary=null;if(result!=RESULT_OK||data==null||content==null&&bytes==null)return;try(OutputStream stream=getContentResolver().openOutputStream(data.getData())){if(stream==null)throw new Exception();if(bytes!=null)stream.write(bytes);else{java.io.Writer writer=new java.io.OutputStreamWriter(stream,StandardCharsets.UTF_8);writer.write(content);writer.flush();}appView.evaluateJavascript("window.onNativeExportResult&&window.onNativeExportResult('文件已保存')",null);}catch(Exception ignored){appView.evaluateJavascript("window.onNativeExportResult&&window.onNativeExportResult('保存失败，请重试')",null);}}
+
  private void handlePortalBack(){if(portalDialog==null||!portalDialog.isShowing())return;if(portalView!=null&&portalView.canGoBack())portalView.goBack();else portalDialog.dismiss();}
  private void handleAppBack(){
   if(portalDialog!=null&&portalDialog.isShowing()){handlePortalBack();return;}

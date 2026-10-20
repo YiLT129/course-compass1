@@ -1,0 +1,2 @@
+const clone=x=>JSON.parse(JSON.stringify(x));
+export function createHistory(limit=40){const past=[],future=[];return {push(value){past.push(clone(value));if(past.length>limit)past.shift();future.length=0;},undo(value){if(!past.length)return null;future.push(clone(value));return past.pop();},redo(value){if(!future.length)return null;past.push(clone(value));return future.pop();},clear(){past.length=0;future.length=0;},get canUndo(){return past.length>0;},get canRedo(){return future.length>0;}};}

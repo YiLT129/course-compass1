@@ -6,11 +6,14 @@
 
 - 一屏五天/七天课表、课程详情与搜索、今日安排、个人安排、学期与作息设置。
 - 自选壁纸、比例裁剪、拖动缩放、深浅主题；设置保存在设备内。
-- 贴纸、留言、倒数日、HTTPS快捷入口；拖动摆放、单项删除、一键隐藏、重启保留。
+- 贴纸、留言、倒数日、HTTPS快捷入口；拖动摆放、缩放旋转、图层、锁定、撤销重做、自动对齐；重启保留。
 - 简洁玻璃 / 像素时钟 / 唱片卡片，选择课程、时间日期或一句话；可显示在应用内和Android桌面。
 - Android 可选锁屏课程通知；锁屏外观由系统决定，系统不一定允许直接放置桌面组件。
 - 正方JSON、兼容布局的正方文字PDF、通用CSV/Excel粘贴表格、标准课程JSON；先预览再更新。
-- JSON课表备份、ICS课程日历、离线缓存；数据与照片保存在本机。
+- 完整备份恢复（课程、个人安排、原图/裁剪图、主题与本机记录）、主题包分享、PNG课表海报、ICS课程日历。
+- 版本检查与覆盖升级；网页有更新时手动切换，数据与照片保存在本机。
+
+最新下载：[GitHub Releases](https://github.com/YiLT129/course-compass1/releases)。安卓直接覆盖安装，保留原包名和签名；请勿先卸载。
 
 ## 平台与适配边界
 
@@ -19,7 +22,7 @@
 | 课表、壁纸、挂件、应用内个性卡片 | 支持 | 支持，需HTTPS |
 | 本地PDF/JSON/CSV导入 | 支持 | 支持；PDF需兼容文字布局 |
 | 学校官方页面登录与自动读取 | 内置广州理工流程；其他正方同结构为试验接入 | 暂不支持跨域自动同步；使用文件/表格导入 |
-| 桌面系统小组件 | 支持三种风格 | 尚未实现原生WidgetKit扩展 |
+| 桌面系统小组件 | 支持三种风格，各组件独立设置 | 尚未实现原生WidgetKit扩展 |
 | 锁屏课程提示 | 可选系统通知 | 尚未实现原生扩展 |
 
 在iPhone的Safari中打开部署网址，分享 → 添加到主屏幕。网页版无需IPA；尚未提供签名的iOS原生安装包。主屏幕网页安装与锁屏WidgetKit是两种不同能力。[Apple安装说明](https://support.apple.com/zh-cn/guide/iphone/iphea86e5236/ios)、[WidgetKit](https://developer.apple.com/documentation/widgetkit)。
@@ -47,7 +50,7 @@ cd android
 gradle :app:assembleDebug
 ```
 
-也可在Android Studio打开 `android/`，配置SDK与Gradle。当前没有分发Gradle wrapper二进制。输出 `android/app/build/outputs/apk/debug/app-debug.apk`。最低Android8；版本0.3.0（14）。正式分发应使用自己的签名密钥。旧安装更新需同包名、同证书及更高版本号；卸载可能删除本机数据。
+也可在Android Studio打开 `android/`，配置SDK与Gradle。当前没有分发Gradle wrapper二进制。输出 `android/app/build/outputs/apk/debug/app-debug.apk`。最低Android8；版本0.4.0（15）。正式分发应使用自己的签名密钥。旧安装更新需同包名、同证书及更高版本号；卸载可能删除本机数据。
 
 ```sh
 python scripts/verify-apk-startup.py android/app/build/outputs/apk/debug/app-debug.apk

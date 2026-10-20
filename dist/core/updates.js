@@ -1,0 +1,7 @@
+export const APP_VERSION='0.4.0',REPOSITORY='YiLT129/course-compass1',RELEASES_URL='https://github.com/'+REPOSITORY+'/releases';
+export function compareVersions(a,b){const parse=v=>{const m=String(v).match(/^v?(\d+)\.(\d+)\.(\d+)(?:-[\w.-]+)?$/);if(!m)throw Error('版本号无效');return m.slice(1).map(Number);};const x=parse(a),y=parse(b);for(let i=0;i<3;i++)if(x[i]!==y[i])return Math.sign(x[i]-y[i]);return 0;}
+export function selectRelease(releases,preview=true){
+ if(!Array.isArray(releases))throw Error('版本服务器返回格式异常');
+ const valid=[];for(const r of releases){if(r.draft||r.prerelease&&!preview)continue;try{compareVersions(r.tag_name,APP_VERSION);const page=new URL(r.html_url);if(page.origin!=='https://github.com'||!page.pathname.startsWith('/'+REPOSITORY+'/releases/tag/'))continue;const apk=(r.assets||[]).find(a=>{try{const u=new URL(a.browser_download_url);return a.state==='uploaded'&&a.size>0&&u.origin==='https://github.com'&&u.pathname.startsWith('/'+REPOSITORY+'/releases/download/')&&u.pathname.endsWith('.apk');}catch{return false;}});if(apk)valid.push({version:r.tag_name.replace(/^v/,''),title:String(r.name||r.tag_name).slice(0,150),body:String(r.body||'').slice(0,20000),url:page.href,download:apk.browser_download_url,size:apk.size,sha256:/^sha256:[a-f0-9]{64}$/.test(apk.digest||'')?apk.digest.slice(7):null,preview:!!r.prerelease});}catch{}}
+ return valid.sort((a,b)=>compareVersions(b.version,a.version))[0]||null;
+}
