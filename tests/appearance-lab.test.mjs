@@ -1,19 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {DEFAULT_APPEARANCE,THEME_KEYS,DENSITY_PRESETS,validateAppearance,layoutMetrics,courseColorKey,relativeLuminance,analyseWallpaper,readabilityStyle} from '../dist/core/appearance.js';
+import {DEFAULT_APPEARANCE,THEME_KEYS,DENSITY_PRESETS,validateAppearance,layoutMetrics,courseColorKey,relativeLuminance,analyseWallpaper,readabilityStyle,migrateAppearance060,PREFS_KEY} from '../dist/core/appearance.js';
 import {validatePackage,themeFromBackup,mergeTheme} from '../dist/core/packages.js';
 import {addPreviewSticker,editPreviewSticker,removePreviewSticker} from '../dist/demo/appearance-lab.js';
 
 test('旧版外观迁移获得合适的密度，周末及手动配置仍保留',()=>{
  const prefs=validateAppearance({weekend:true,wallpaper:'night',font:'rounded',opacity:75});
- assert.equal(prefs.fontSize,10);assert.equal(prefs.rowHeight,84);assert.equal(prefs.gridGap,4);assert.equal(prefs.autoContrast,true);assert.equal(prefs.capsuleExpanded,false);
+ assert.equal(prefs.fontSize,10);assert.equal(prefs.rowHeight,68);assert.equal(prefs.gridGap,4);assert.equal(prefs.autoContrast,true);assert.equal(prefs.capsuleExpanded,false);
  assert.equal(prefs.weekend,true);assert.equal(prefs.wallpaper,'night');assert.equal(prefs.opacity,75);
  const first=validateAppearance({});first.courseColors['cc-12345678']='#ffffff';assert.deepEqual(validateAppearance({}).courseColors,{});assert.deepEqual(DEFAULT_APPEARANCE.courseColors,{});
 });
 test('密度边界拦截恶意值，大字号不会挤进过矮的课块',()=>{
  const prefs=validateAppearance({fontSize:100,rowHeight:-100,gridGap:Infinity});
  assert.equal(prefs.fontSize,14);assert.equal(prefs.rowHeight,64);assert.equal(prefs.gridGap,4);
- assert.deepEqual([validateAppearance({fontSize:null,rowHeight:''}).fontSize,validateAppearance({fontSize:null,rowHeight:''}).rowHeight],[10,84]);
+ assert.deepEqual([validateAppearance({fontSize:null,rowHeight:''}).fontSize,validateAppearance({fontSize:null,rowHeight:''}).rowHeight],[10,68]);
  const big=layoutMetrics(prefs);assert.ok(big.rowHeight>=85);assert.equal(big.titleLines,2);
  assert.ok(layoutMetrics(DENSITY_PRESETS.compact).rowHeight<layoutMetrics(DENSITY_PRESETS.comfortable).rowHeight);
  assert.equal(layoutMetrics({rowHeight:124,fontSize:14}).titleLines,3);
@@ -37,10 +37,15 @@ test('壁纸分析使用线性亮度，识别深浅及高反差图片并忽略�
  const mixed=analyseWallpaper(new Uint8ClampedArray([0,0,0,255,255,255,255,255]));assert.equal(mixed.busy,true);assert.ok(mixed.variation>.4);
  assert.equal(analyseWallpaper(new Uint8ClampedArray([0,0,0,0])).dark,false);
 });
-test('自动清晰模式只提高必要的清晰度，关闭后服从手动透明度',()=>{
- const busy=readabilityStyle({opacity:55},{dark:true,busy:true,luminance:.2});assert.equal(busy.cardAlpha,.94);assert.equal(busy.dark,true);assert.equal(busy.localBlur,9);
+test('自动清晰模式保留整块透明度，文字局部底衬独立增强',()=>{
+ const busy=readabilityStyle({opacity:25},{dark:true,busy:true,luminance:.2});assert.equal(busy.cardAlpha,.25);assert.equal(busy.textAlpha,.86);assert.equal(busy.dark,true);assert.equal(busy.localBlur,9);
  assert.equal(readabilityStyle({opacity:100},{busy:true}).cardAlpha,1);
- const manual=readabilityStyle({opacity:55,autoContrast:false},{dark:true,busy:true});assert.equal(manual.cardAlpha,.55);assert.equal(manual.localBlur,0);assert.equal(manual.labelAlpha,0);assert.equal(manual.dark,false);
+ const manual=readabilityStyle({opacity:20,autoContrast:false},{dark:true,busy:true});assert.equal(manual.cardAlpha,.2);assert.equal(manual.textAlpha,0);assert.equal(manual.localBlur,0);assert.equal(manual.labelAlpha,0);assert.equal(manual.dark,false);
+});
+test('更短更透的默认迁移只执行一次，保留已定制外观及课表时间原文',()=>{
+ const values=new Map([[PREFS_KEY,JSON.stringify({rowHeight:84,fontSize:10,gridGap:4,opacity:84,weekend:true})],['course-compass.v1','private timetable bytes']]);const storage={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v)};
+ assert.equal(migrateAppearance060(storage),true);const next=JSON.parse(values.get(PREFS_KEY));assert.equal(next.rowHeight,68);assert.equal(next.opacity,58);assert.equal(next.weekend,true);assert.equal(values.get('course-compass.v1'),'private timetable bytes');assert.equal(migrateAppearance060(storage),false);
+ values.set(PREFS_KEY,JSON.stringify({rowHeight:110,fontSize:13,gridGap:7,opacity:35}));migrateAppearance060(storage);const custom=JSON.parse(values.get(PREFS_KEY));assert.equal(custom.rowHeight,110);assert.equal(custom.opacity,35);assert.ok(layoutMetrics().rowHeight<84);
 });
 test('统一预览只编辑贴纸，完整保留私人留言、链接、组件和显示偏好',()=>{
  const before={visible:false,widget:{content:'quote',quote:'私人组件句子'},items:[{id:'private-note',type:'note',text:'私人留言'},{id:'private-link',type:'link',text:'私人入口',url:'https://example.edu.cn/'},{id:'private-countdown',type:'countdown',text:'私人日期',date:'2027-01-01'}]};

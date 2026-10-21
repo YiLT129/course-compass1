@@ -1,6 +1,6 @@
 import {parseTable,TABLE_EXAMPLE} from '../adapters/universal.js';
 import {prepareImport} from '../core/import-plan.js';
-import {validateEnvelope,validateSettings,DEFAULT_TIMES,conflicts,toICS} from '../core/model.js';
+import {validateEnvelope,validateSettings,parseWeeks,DEFAULT_TIMES,conflicts,toICS} from '../core/model.js';
 import {importData} from '../adapters/registry.js';import '../adapters/zfsoft.js';
 import {parseSchoolPDF} from '../adapters/school-pdf.js';
 import {compareImports,commitTimetableImport,undoTimetableImport,validateImportHistory,prepareUndo,currentImportState,recoverImport} from '../core/import-history.js';
@@ -29,5 +29,6 @@ export function setupDataTools({get,getEffective,apply,notify,openSheet}){
  $('#table-example').onclick=()=>{$('#table-text').value=TABLE_EXAMPLE;};
  $('#table-parse').onclick=()=>{try{preview(parseTable($('#table-text').value));}catch(e){$('#table-error').textContent=e.message;}};
  document.addEventListener('click',e=>{const action=e.target.closest('[data-action]')?.dataset.action;try{if(action==='table'){$('#table-error').textContent='';openSheet('#table-sheet');}if(action==='import')$('#import-file').click();if(action==='term')term();if(action==='packages')refreshHistory();if(action==='backup'){const current=get();download('课间-课表备份.json','application/json',JSON.stringify({version:1,...current},null,2));}if(action==='calendar')download('课间-课程日历.ics','text/calendar',toICS(getEffective?getEffective():get().courses,get().settings));if(action==='login')window.CourseCompass?.openPortal();if(action==='sync')window.CourseCompass?.syncPortal();}catch(error){notify(error.message);}});
- return {receive,preview,refreshHistory,undo:()=>undoTimetableImport({storage:localStorage,persistence:importPersistence,apply:applySaved,school:school()})};
+ function previewEnvelope(envelope,{name='截图识别'}={}){const checked=validateEnvelope(envelope);let sourceScope;if(envelope.sourceScope){if(envelope.sourceScope.type!=='week')throw Error('截图导入须明确更新周次');const weeks=parseWeeks(envelope.sourceScope.weeks);if(weeks.some(w=>w>checked.settings.totalWeeks))throw Error('截图周次超出本学期');sourceScope={type:'week',weeks};}const warnings=Array.isArray(envelope.warnings)?envelope.warnings.slice(0,20).map(value=>String(value).slice(0,300)):[];return preview({...checked,...(sourceScope?{sourceScope}:{}),warnings,adapter:name});}
+ return {receive,preview,previewEnvelope,refreshHistory,undo:()=>undoTimetableImport({storage:localStorage,persistence:importPersistence,apply:applySaved,school:school()})};
 }

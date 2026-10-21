@@ -4,6 +4,12 @@
 
 ## 功能
 
+- 完全本机截图识别：中英OCR内置，先校准截图课程区、修改草稿并核对后导入，只更新所选周次/区域。
+- 长按拖动调课：按课块选择单次或后续已排周，冲突先核对；原始教务记录不改，可恢复。
+- 离线对照朋友的JSON课表，按真实日期与各自作息显示共同未排课时间。
+- 大字教室卡、Android长按图标快捷入口；本地抽签盒。
+- 更短更透的默认课块，20%—100%背景不透明度可调，文字使用独立小范围底衬。
+
 - 一屏五天/七天课表，同一排课的连续小节按课间间隔分组：不超过10分钟合块，超过10分钟分开；按本机时间与已保存作息显示当前课、课间和下一节。
 - 课程详情与搜索、今日安排、个人安排、学期与作息设置。
 - 课表字号/每节高度/间距可调，紧凑与舒展预设；当前课程胶囊可展开查看教室与下一节。
@@ -53,7 +59,7 @@ cd android
 gradle :app:assembleDebug
 ```
 
-也可在Android Studio打开 `android/`，配置SDK与Gradle。当前没有分发Gradle wrapper二进制。输出 `android/app/build/outputs/apk/debug/app-debug.apk`。最低Android8；版本0.5.1（18）。正式分发应使用自己的签名密钥。旧安装更新需同包名、同证书及更高版本号；卸载可能删除本机数据。
+也可在Android Studio打开 `android/`，配置SDK与Gradle。当前没有分发Gradle wrapper二进制。输出 `android/app/build/outputs/apk/debug/app-debug.apk`。最低Android8；版本0.6.0（19）。正式分发应使用自己的签名密钥。旧安装更新需同包名、同证书及更高版本号；卸载可能删除本机数据。
 
 ```sh
 python scripts/verify-apk-startup.py android/app/build/outputs/apk/debug/app-debug.apk

@@ -4,8 +4,10 @@ import {validateAppearance,validateWidget,THEME_KEYS} from './appearance.js';
 import {validateSchool} from './schools.js';
 import {validateImportHistory,IMPORT_HISTORY_KEY} from './import-history.js';
 import {validateOverrides} from './overrides.js';
+import {PEER_KEY,DRAW_KEY,validatePeer,validateDrawBoxes} from './offline-tools.js';
+import {MOVES_KEY,validateMoves} from './moves.js';
 export const MAX_PACKAGE=64*1024*1024;
-export const STATE_KEYS=['course-compass.v1','course-compass.demo.prefs','course-compass.demo.personal','course-compass.personalization.v1','course-compass.school.v1','course-compass.lastImport','course-compass.widget-presets.v1','course-compass.overrides.v1',IMPORT_HISTORY_KEY];
+export const STATE_KEYS=['course-compass.v1','course-compass.demo.prefs','course-compass.demo.personal','course-compass.personalization.v1','course-compass.school.v1','course-compass.lastImport','course-compass.widget-presets.v1','course-compass.overrides.v1',IMPORT_HISTORY_KEY,PEER_KEY,DRAW_KEY,MOVES_KEY];
 export function allowedKey(k){return STATE_KEYS.includes(k)||/^course-compass\.(grades|user|profile)\.v1(?:\.[a-z0-9.-]+)?$/.test(k);}
 function plain(v){return v&&typeof v==='object'&&!Array.isArray(v);}
 export function validateResource(value){
@@ -34,6 +36,9 @@ export function validateState(state){
   else if(key==='course-compass.personalization.v1')value=validatePersonal(value);
   else if(key==='course-compass.school.v1')value=validateSchool(value);
   else if(key==='course-compass.overrides.v1')value=validateOverrides(value);
+  else if(key===PEER_KEY)value=validatePeer(value);
+  else if(key===DRAW_KEY)value=validateDrawBoxes(value);
+  else if(key===MOVES_KEY)value=validateMoves(value);
   else if(key===IMPORT_HISTORY_KEY)value=validateImportHistory(value);
   else if(key==='course-compass.widget-presets.v1'){if(!Array.isArray(value)||value.length>80)throw Error('组件设置无效');value=value.map(x=>({id:Math.max(0,Math.floor(Number(x.id)||0)),...validateWidget(x)}));}
   else if(!plain(value))throw Error('个人记录格式无效');

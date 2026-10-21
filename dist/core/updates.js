@@ -1,4 +1,4 @@
-export const APP_VERSION='0.5.1',REPOSITORY='YiLT129/course-compass1',RELEASES_URL='https://github.com/'+REPOSITORY+'/releases';
+export const APP_VERSION='0.6.0',REPOSITORY='YiLT129/course-compass1',RELEASES_URL='https://github.com/'+REPOSITORY+'/releases';
 export function compareVersions(a,b){const parse=v=>{const m=String(v).match(/^v?(\d+)\.(\d+)\.(\d+)(?:-[\w.-]+)?$/);if(!m)throw Error('版本号无效');return m.slice(1).map(Number);};const x=parse(a),y=parse(b);for(let i=0;i<3;i++)if(x[i]!==y[i])return Math.sign(x[i]-y[i]);return 0;}
 export function selectRelease(releases,preview=true){
  if(!Array.isArray(releases))throw Error('版本服务器返回格式异常');

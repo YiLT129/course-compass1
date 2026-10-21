@@ -88,7 +88,7 @@ export function setupAppearanceLab({getPrefs,updatePrefs,getCourses=()=>[],getPr
  function updateReadability(prefs){
   const style=readabilityStyle(prefs,sample),root=document.documentElement;
   document.body.dataset.autoContrast=style.enabled?'on':'off';document.body.dataset.wallpaperTone=style.dark?'dark':'light';
-  root.style.setProperty('--card-alpha',String(style.cardAlpha));root.style.setProperty('--readability-blur',style.localBlur+'px');root.style.setProperty('--readability-label-alpha',String(style.labelAlpha));
+  root.style.setProperty('--card-alpha',String(style.cardAlpha));root.style.setProperty('--course-text-alpha',String(style.textAlpha));root.style.setProperty('--readability-blur',style.localBlur+'px');root.style.setProperty('--readability-label-alpha',String(style.labelAlpha));
   preview.querySelector('.lab-sample-state').textContent=!style.enabled?'使用你的手动透明度设置':sample.busy?'多色壁纸 · 已加强文字底衬与卡片清晰度':style.dark?'深色壁纸 · 时间文字自动提亮':'浅色壁纸 · 时间文字自动加深';
  }
  async function sampleImage(source){

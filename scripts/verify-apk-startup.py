@@ -1,5 +1,5 @@
 from pathlib import Path
-import zipfile,re,sys
+import zipfile,re,sys,json,hashlib
 if len(sys.argv)!=2:raise SystemExit('Usage: python scripts/verify-apk-startup.py /path/to/app.apk')
 apk=Path(sys.argv[1])
 with zipfile.ZipFile(apk) as z:
@@ -10,6 +10,13 @@ with zipfile.ZipFile(apk) as z:
     names=set(z.namelist())
     for name in ['assets/demo/index.html','assets/demo/demo.js','assets/demo/crop-editor.js','assets/demo/data-tools.js','assets/demo/glass.css','assets/core/model.js','assets/vendor/pdfjs/pdf.js','assets/vendor/pdfjs/pdf.worker.js']:
         assert name in names,name
+    if 'assets/vendor/ocr/manifest.json' in names:
+        ocr=json.loads(z.read('assets/vendor/ocr/manifest.json'))
+        for name,meta in ocr['files'].items():
+            path='assets/vendor/ocr/'+name
+            assert path in names,f'Missing OCR asset (possible AAPT filename rewrite): {path}'
+            data=z.read(path)
+            assert len(data)==meta['bytes'] and hashlib.sha256(data).hexdigest()==meta['sha256'],f'Changed OCR asset: {path}'
     for name in sorted(n for n in names if n.startswith('assets/') and n.endswith(('.js','.html')) and '/vendor/' not in n):
         text=z.read(name).decode('utf-8')
         refs=re.findall(r'(?:from\s*|import\s*\(|(?:src|href)=)[\s]*[\'"]([^\'"<>\s]+)',text)

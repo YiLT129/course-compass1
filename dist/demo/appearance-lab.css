@@ -1,4 +1,4 @@
-:root{--tt-font-size:10px;--tt-row-height:84px;--tt-gap:4px;--tt-card-inset:2px;--tt-title-lines:3;--readability-blur:5px;--readability-label-alpha:.68}
+:root{--tt-font-size:10px;--tt-row-height:68px;--tt-gap:4px;--tt-card-inset:2px;--tt-title-lines:3;--readability-blur:5px;--readability-label-alpha:.62;--course-text-alpha:.76;--course-text-bg:246,251,255}
 .timetable,.timetable.weekend{grid-template-rows:repeat(12,var(--tt-row-height));column-gap:var(--tt-gap);min-width:0;width:100%}
 .date-heading,.date-heading.weekend{column-gap:var(--tt-gap);min-width:0;width:100%}
 .timetable .course-card[data-span],.timetable.weekend .course-card[data-span]{margin-top:var(--tt-card-inset);margin-bottom:var(--tt-card-inset);padding:5px 4px;gap:2px;min-width:0}
@@ -11,6 +11,8 @@
 .list-card[data-custom-color] .list-icon{background:rgba(var(--course-custom-rgb),var(--card-alpha));color:var(--course-custom-color)}
 body[data-auto-contrast=on] .course-card,body[data-auto-contrast=on] .agenda-card{color:#294153}
 body.dark[data-auto-contrast=on] .course-card,body.dark[data-auto-contrast=on] .agenda-card{color:#e0edf7}
+body.dark{--course-text-bg:25,43,58}
+body[data-auto-contrast=on] .course-card strong,body[data-auto-contrast=on] .course-card .location,body[data-auto-contrast=on] .course-card .card-time,body[data-auto-contrast=on] .agenda-title,body[data-auto-contrast=on] .lab-preview-course strong,body[data-auto-contrast=on] .lab-preview-course>span{background:rgba(var(--course-text-bg),var(--course-text-alpha));border-radius:4px;padding:0 2px;box-decoration-break:clone;-webkit-box-decoration-break:clone;opacity:1}
 body[data-auto-contrast=on] .date-heading,body[data-auto-contrast=on] .time-slot,body[data-auto-contrast=on] .schedule-hint{background:rgba(246,251,255,var(--readability-label-alpha));border-radius:10px;backdrop-filter:blur(var(--readability-blur));-webkit-backdrop-filter:blur(var(--readability-blur));color:#294153}
 body[data-auto-contrast=on] .date-heading{padding-top:7px;padding-bottom:6px;margin-bottom:8px}
 body[data-auto-contrast=on] .time-slot{align-self:start;margin-top:var(--tt-card-inset);padding:6px 0;gap:4px}
