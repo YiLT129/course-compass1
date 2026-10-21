@@ -4,7 +4,7 @@
 
 ## 功能
 
-- 一屏五天/七天课表，连排课程按单个节次显示；按本机时间与已保存作息显示当前课、课间和下一节。
+- 一屏五天/七天课表，同一排课的连续小节按课间间隔分组：不超过10分钟合块，超过10分钟分开；按本机时间与已保存作息显示当前课、课间和下一节。
 - 课程详情与搜索、今日安排、个人安排、学期与作息设置。
 - 课表字号/每节高度/间距可调，紧凑与舒展预设；当前课程胶囊可展开查看教室与下一节。
 - 自选壁纸、比例裁剪、拖动缩放、深浅主题；自动分析壁纸明暗提高文字可读性，外观实时预览。
@@ -53,7 +53,7 @@ cd android
 gradle :app:assembleDebug
 ```
 
-也可在Android Studio打开 `android/`，配置SDK与Gradle。当前没有分发Gradle wrapper二进制。输出 `android/app/build/outputs/apk/debug/app-debug.apk`。最低Android8；版本0.5.0（17）。正式分发应使用自己的签名密钥。旧安装更新需同包名、同证书及更高版本号；卸载可能删除本机数据。
+也可在Android Studio打开 `android/`，配置SDK与Gradle。当前没有分发Gradle wrapper二进制。输出 `android/app/build/outputs/apk/debug/app-debug.apk`。最低Android8；版本0.5.1（18）。正式分发应使用自己的签名密钥。旧安装更新需同包名、同证书及更高版本号；卸载可能删除本机数据。
 
 ```sh
 python scripts/verify-apk-startup.py android/app/build/outputs/apk/debug/app-debug.apk

@@ -1,10 +1,11 @@
 :root{--tt-font-size:10px;--tt-row-height:84px;--tt-gap:4px;--tt-card-inset:2px;--tt-title-lines:3;--readability-blur:5px;--readability-label-alpha:.68}
 .timetable,.timetable.weekend{grid-template-rows:repeat(12,var(--tt-row-height));column-gap:var(--tt-gap);min-width:0;width:100%}
 .date-heading,.date-heading.weekend{column-gap:var(--tt-gap);min-width:0;width:100%}
-.timetable .course-card[data-span="1"],.timetable.weekend .course-card[data-span="1"]{margin-top:var(--tt-card-inset);margin-bottom:var(--tt-card-inset);padding:5px 4px;gap:2px;min-width:0}
-.timetable .course-card[data-span="1"] strong,.timetable.weekend .course-card[data-span="1"] strong{font-size:var(--tt-font-size);line-height:1.3;-webkit-line-clamp:var(--tt-title-lines)}
-.timetable.weekend .course-card[data-span="1"] strong{font-size:max(9px,calc(var(--tt-font-size) - 1px))}
-.timetable .course-card[data-span="1"] .location,.timetable .course-card[data-span="1"] .card-time,.timetable.weekend .course-card[data-span="1"] .location,.timetable.weekend .course-card[data-span="1"] .card-time{font-size:max(7px,calc(var(--tt-font-size) - 2px));line-height:1.3;display:block}
+.timetable .course-card[data-span],.timetable.weekend .course-card[data-span]{margin-top:var(--tt-card-inset);margin-bottom:var(--tt-card-inset);padding:5px 4px;gap:2px;min-width:0}
+.timetable .course-card[data-span] strong,.timetable.weekend .course-card[data-span] strong{font-size:var(--tt-font-size);line-height:1.3;-webkit-line-clamp:var(--tt-title-lines)}
+.timetable.weekend .course-card[data-span] strong{font-size:max(9px,calc(var(--tt-font-size) - 1px))}
+.timetable .course-card[data-span] .location,.timetable .course-card[data-span] .card-time,.timetable.weekend .course-card[data-span] .location,.timetable.weekend .course-card[data-span] .card-time{font-size:max(7px,calc(var(--tt-font-size) - 2px));line-height:1.3;display:block}
+.timetable.weekend .course-card[data-span] .card-time{font-size:clamp(7px,calc(var(--tt-font-size) - 3px),9px);white-space:normal;overflow-wrap:anywhere}
 .course-card[data-custom-color],.agenda-card[data-custom-color],.lab-preview-course[data-custom-color]{background:rgba(var(--course-custom-rgb),var(--card-alpha));color:var(--course-custom-ink)}
 .course-card[data-custom-color]:before{background:var(--course-custom-color);opacity:.8}
 .list-card[data-custom-color] .list-icon{background:rgba(var(--course-custom-rgb),var(--card-alpha));color:var(--course-custom-color)}

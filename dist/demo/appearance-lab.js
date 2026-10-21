@@ -18,13 +18,13 @@ export function removePreviewSticker(raw,id){
 }
 
 /** Mounts into the registered appearance sheet; callbacks own persistence and navigation. */
-export function setupAppearanceLab({getPrefs,updatePrefs,getCourses=()=>[],openSheet,notify=()=>{},onPersonalChange=()=>{}}){
+export function setupAppearanceLab({getPrefs,updatePrefs,getCourses=()=>[],getPreviewBlocks=getCourses,openSheet,notify=()=>{},onPersonalChange=()=>{}}){
  const sheet=document.querySelector('#appearance-sheet'),wallpaper=document.querySelector('#wallpaper');
  if(!sheet)return {refresh(){},onWallpaperChange(){}};
  let sample=analyseWallpaper(new Uint8ClampedArray([...BUILTIN_SAMPLES.sky,255])),lastImage='',generation=0,frame=0,lastCourses='',selectedSticker='';
  const preview=sheet.querySelector('.appearance-preview')||document.createElement('div');
  preview.className='appearance-preview appearance-live-preview';
- preview.innerHTML='<div class="lab-preview-heading"><strong>实时预览</strong><span>七天同屏 · 每节独立</span><button type="button" data-close="appearance-sheet" aria-label="关闭外观设置">✕</button></div><div class="lab-preview-days" aria-hidden="true">'+['一','二','三','四','五','六','日'].map(day=>'<span>'+day+'</span>').join('')+'</div><div class="lab-preview-grid" aria-label="当前外观的课程预览"></div><p class="lab-sample-state" role="status"></p>';
+ preview.innerHTML='<div class="lab-preview-heading"><strong>实时预览</strong><span>七天同屏 · 连堂分组</span><button type="button" data-close="appearance-sheet" aria-label="关闭外观设置">✕</button></div><div class="lab-preview-days" aria-hidden="true">'+['一','二','三','四','五','六','日'].map(day=>'<span>'+day+'</span>').join('')+'</div><div class="lab-preview-grid" aria-label="当前外观的课程预览"></div><p class="lab-sample-state" role="status"></p>';
  if(!preview.parentNode)sheet.querySelector('.sheet-title').after(preview);
  const density=document.createElement('section');density.className='appearance-lab';density.setAttribute('aria-label','课表密度');
  density.innerHTML='<div class="lab-section-heading"><h3>看起来刚刚好</h3><span id="lab-density-summary"></span></div><div class="lab-presets" role="group" aria-label="课表密度预设"><button type="button" data-density="compact">紧凑</button><button type="button" data-density="comfortable">舒展</button></div><div class="slider-row"><label for="lab-font-size">课名字号</label><output id="lab-font-size-value"></output><input id="lab-font-size" type="range" min="9" max="14" step="1"></div><div class="slider-row"><label for="lab-row-height">每节高度</label><output id="lab-row-height-value"></output><input id="lab-row-height" type="range" min="64" max="124" step="2"></div><div class="slider-row"><label for="lab-grid-gap">课块间距</label><output id="lab-grid-gap-value"></output><input id="lab-grid-gap" type="range" min="2" max="8" step="1"></div><label class="lab-auto-contrast"><span><b>让文字自动看清</b><small>按壁纸明暗调整时间文字、卡片和局部模糊</small></span><input id="lab-auto-contrast" type="checkbox" role="switch"></label>';
@@ -73,8 +73,8 @@ export function setupAppearanceLab({getPrefs,updatePrefs,getCourses=()=>[],openS
  function renderPreview(prefs){
   const image=wallpaper?getComputedStyle(wallpaper).backgroundImage:'none';preview.style.backgroundImage=image;
   preview.style.backgroundPosition='50% '+prefs.position+'%';grid.replaceChildren();
-  const courses=subjects().slice(0,7),seenSlots=new Set();
-  for(let i=0;i<courses.length;i++){const c=courses[i],card=document.createElement('div');card.className='lab-preview-course tone-'+(['blue','green','purple','orange','rose','slate'].includes(c.tone)?c.tone:'blue');card.dataset.courseName=c.name;let day=Math.max(1,Math.min(7,Number(c.day)||i+1)),row=i%2+1;while(seenSlots.has(day+'-'+row)){day=day%7+1;}seenSlots.add(day+'-'+row);card.style.gridColumn=day;card.style.gridRow=row;card.title=c.name;const title=document.createElement('strong');title.textContent=c.name;const sub=document.createElement('span');sub.textContent='第'+(c.start||1)+'节';card.append(title,sub);grid.append(card);}
+  const courses=getPreviewBlocks(),seenSlots=new Map();
+  for(const c of courses){const day=Math.max(1,Math.min(7,Number(c.day)||1)),row=(seenSlots.get(day)||0)+1;if(row>2)continue;seenSlots.set(day,row);const card=document.createElement('div');card.className='lab-preview-course tone-'+(['blue','green','purple','orange','rose','slate'].includes(c.tone)?c.tone:'blue');card.dataset.courseName=c.name;card.style.gridColumn=day;card.style.gridRow=row;card.title=c.name;const title=document.createElement('strong');title.textContent=c.name;const sub=document.createElement('span');sub.textContent='第'+(c.start===c.end?c.start:c.start+'–'+c.end)+'节';card.append(title,sub);grid.append(card);}
   if(!courses.length){const empty=document.createElement('span');empty.className='lab-preview-empty';empty.textContent='导入课表后，在这里实时预览';grid.append(empty);}
  }
  function renderStickers(){
