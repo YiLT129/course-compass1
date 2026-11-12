@@ -1,0 +1,1 @@
+cfb900c19aada1f33a7bcbd40754114008390af6e523bbfdead0f27b444823c1  course-compass-0.7.0-android.apk

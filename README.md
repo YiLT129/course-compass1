@@ -4,6 +4,8 @@
 
 ## 功能
 
+- 日程规划：自选日期和时间，到点弹窗；Android 支持独立的后台通知。日程可编辑、删除和随完整备份迁移。
+
 - 完全本机截图识别：中英OCR内置，先校准截图课程区、修改草稿并核对后导入，只更新所选周次/区域。
 - 长按拖动调课：按课块选择单次或后续已排周，冲突先核对；原始教务记录不改，可恢复。
 - 离线对照朋友的JSON课表，按真实日期与各自作息显示共同未排课时间。
@@ -33,6 +35,7 @@
 | 学校官方页面登录与自动读取 | 内置广州理工流程；其他正方同结构为试验接入 | 暂不支持跨域自动同步；使用文件/表格导入 |
 | 桌面系统小组件 | 支持三种风格，各组件独立设置 | 尚未实现原生WidgetKit扩展 |
 | 锁屏课程提示 | 可选系统通知 | 尚未实现原生扩展 |
+| 日程规划与提醒 | 应用内弹窗；打开通知后支持后台提醒 | 页面打开时弹窗，关闭后不后台提醒 |
 
 在iPhone的Safari中打开部署网址，分享 → 添加到主屏幕。网页版无需IPA；尚未提供签名的iOS原生安装包。主屏幕网页安装与锁屏WidgetKit是两种不同能力。[Apple安装说明](https://support.apple.com/zh-cn/guide/iphone/iphea86e5236/ios)、[WidgetKit](https://developer.apple.com/documentation/widgetkit)。
 
@@ -59,7 +62,7 @@ cd android
 gradle :app:assembleDebug
 ```
 
-也可在Android Studio打开 `android/`，配置SDK与Gradle。当前没有分发Gradle wrapper二进制。输出 `android/app/build/outputs/apk/debug/app-debug.apk`。最低Android8；版本0.6.0（19）。正式分发应使用自己的签名密钥。旧安装更新需同包名、同证书及更高版本号；卸载可能删除本机数据。
+也可在Android Studio打开 `android/`，配置SDK与Gradle。当前没有分发Gradle wrapper二进制。输出 `android/app/build/outputs/apk/debug/app-debug.apk`。最低Android8；版本0.7.0（20）。正式分发应使用自己的签名密钥。旧安装更新需同包名、同证书及更高版本号；卸载可能删除本机数据。
 
 ```sh
 python scripts/verify-apk-startup.py android/app/build/outputs/apk/debug/app-debug.apk

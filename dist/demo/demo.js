@@ -2,6 +2,7 @@ import {setupMoves,mountMoveDialog} from './moves-ui.js';
 import {applyMoves,readMoves} from '../core/moves.js';
 import {mountOfflineToolDialogs,setupOfflineTools} from './offline-tools.js';
 import {setupScreenshotImport} from './screenshot-import.js';
+import {mountPlannerDialogs,setupPlanner} from './planner-ui.js';
 import {setupLiveCapsule} from './live-capsule.js';
 import {setupAppearanceLab} from './appearance-lab.js';
 import {setupOverrides} from './overrides-ui.js';
@@ -12,7 +13,7 @@ import {setupPackages,maybeCreateUpgradeBackup} from './packages-ui.js';
 import {setupPoster} from './poster.js';
 import {setupUpdates} from './updates-ui.js';
 import {validateAppearance,DEFAULT_APPEARANCE,migrateAppearance060} from '../core/appearance.js';
-let startupRecoveryError='';try{await recoverRestore();await recoverTimetableImport();await maybeCreateUpgradeBackup('0.6.0');}catch(e){startupRecoveryError=e.message;console.warn('本机恢复与升级保护',e);}
+let startupRecoveryError='';try{await recoverRestore();await recoverTimetableImport();await maybeCreateUpgradeBackup('0.7.0');}catch(e){startupRecoveryError=e.message;console.warn('本机恢复与升级保护',e);}
 import {currentSchool} from '../core/schools.js';
 import {setupSchools} from './schools-ui.js';
 import {setupStudio,readPersonal} from './studio.js';
@@ -28,7 +29,7 @@ const E=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&g
 const paths={menu:'M4 6h16M4 12h16M4 18h16',calendar:'M8 3v4m8-4v4M4 10h16M6 5h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2ZM8 14h2m4 0h2m-8 3h2',search:'m16 16 5 5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z',palette:'M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4 1.5 1.5 0 0 1 1-2h2a4 4 0 0 0 4-4c0-4.5-4-8-9-8ZM7 10h.1m3-4h.1m5 1h.1m3 4h.1',sun:'M12 3V1m0 22v-2M3 12H1m22 0h-2M5 5 3.5 3.5M20.5 20.5 19 19M5 19l-1.5 1.5M20.5 3.5 19 5M17 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0Z',book:'M4 4h6a3 3 0 0 1 2 1 3 3 0 0 1 2-1h6v15h-6a3 3 0 0 0-2 1 3 3 0 0 0-2-1H4V4Zm8 1v15',moon:'M20 15a8.5 8.5 0 0 1-11-11 8.5 8.5 0 1 0 11 11Z',link:'m9 15 6-6m-8 4-1 1a4 4 0 0 0 6 6l3-3a4 4 0 0 0 0-6M9 13a4 4 0 0 1 0-6l3-3a4 4 0 1 1 6 6l-1 1',folder:'M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3V7Z',shield:'m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Zm-4 9 3 3 5-6',sparkles:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3ZM20 3v4m-2-2h4',image:'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm-2 14 5-5 5 5 3-3 5 5M8 7h.1',close:'m6 6 12 12M6 18 18 6',plus:'M12 5v14M5 12h14',check:'m5 12 4 4L19 6',pin:'M18 9c0 5-6 11-6 11S6 14 6 9a6 6 0 1 1 12 0ZM14 9a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z',clock:'M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',user:'M17 7a5 5 0 1 1-10 0 5 5 0 0 1 10 0ZM3 22v-3a6 6 0 0 1 6-6h6a6 6 0 0 1 6 6v3',school:'m2 9 10-6 10 6-10 6L2 9Zm4 3v6c4 3 8 3 12 0v-6m4-3v9',info:'M12 11v6m0-10h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',external:'M14 3h7v7m0-7L10 14M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5','chevron-left':'m15 5-7 7 7 7','chevron-right':'m9 5 7 7-7 7','chevron-down':'m6 9 6 6 6-6',refresh:'M20 7V3l-3 3a8 8 0 1 0 3 10M20 3h-5'};
 const icon=name=>`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name]||paths.calendar}"/></svg>`;
 function icons(){ $$('[data-icon]').forEach(el=>{el.innerHTML=icon(el.dataset.icon);}); }
-icons();
+mountPlannerDialogs();icons();
 const WEEKDAYS=['周一','周二','周三','周四','周五','周六','周日'];
 try{migrateSchoolTimes();}catch(error){console.warn('作息迁移未完成',error.message);}
 const settingsDefault=validateSettings({startDate:'2026-08-31',totalWeeks:16,term:'2026 — 2027 · 第一学期'});
@@ -121,7 +122,8 @@ document.addEventListener('visibilitychange',()=>{clearTimeout(liveTimer);if(!do
 const dataTools=setupDataTools({get:()=>({courses:data,settings,demo:prefs.source==='sample'}),getEffective:()=>applyMoves(effectiveCourses(data,settings,localChanges(),currentSchool().id),settings,moveChanges(),currentSchool().id).filter(c=>!c.cancelled),apply:()=>useExisting(true),notify,openSheet});
 setupSchools({notify,openSheet});
 async function refreshAppearance(){prefs=validateAppearance(JSON.parse(localStorage.getItem('course-compass.demo.prefs')||'{}'));applyPrefs();if(prefs.wallpaper==='custom'){const photo=await imageStore('get');if(photo)showCustom(photo);}studio?.reload();render();}
-setupPackages({notify,openSheet,refreshAppearance});setupPoster({get:()=>({courses:allCourses().filter(c=>!c.cancelled),settings,week,weekend}),notify,openSheet});setupUpdates({notify,openSheet});
+const planner=setupPlanner({dialogs,notify,setView});
+setupPackages({notify,openSheet,refreshAppearance,afterRestore:planner.reload});setupPoster({get:()=>({courses:allCourses().filter(c=>!c.cancelled),settings,week,weekend}),notify,openSheet});setupUpdates({notify,openSheet});
 studio=setupStudio({get:()=>({courses:allCourses(),settings}),notify,openSheet,closeSheets,sync:syncCompanion});
 appearanceLab=setupAppearanceLab({getPrefs:()=>prefs,updatePrefs:updateAppearance,getCourses:rawCourses,getPreviewBlocks:()=>blocksFor(allCourses(),week,null,settings.times),openSheet,notify,onPersonalChange:()=>studio?.reload()});
 liveCapsule=setupLiveCapsule({getPrefs:()=>prefs,updatePrefs:updateAppearance,onOpenSession:c=>showCourse(c.id,c.period,c.date)});
