@@ -213,7 +213,7 @@ export function setupPlanner({dialogs,notify,setView}){
  $('#planner-notifications').onclick=()=>native?.requestPlannerNotifications();
  $('#planner-exact').onclick=()=>native?.requestPlannerExact();
  $('#planner-retry').onclick=()=>{syncNative();permissionCopy();tick();};
- $('#planner-ack').onclick=()=>alert.close();
+ $('#planner-ack').onclick=()=>dialogs.dismiss(alert);
  alert.addEventListener('close',()=>{if(!alert.open)alertKeys.clear();});
  document.addEventListener('click',event=>{
   if(event.target.closest('[data-action=planner]'))openPlanner();

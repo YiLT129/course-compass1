@@ -108,7 +108,7 @@ export function setupAppearanceLab({getPrefs,updatePrefs,getCourses=()=>[],getPr
   for(const [id,key] of Object.entries(fields)){if(document.activeElement!==$('#'+id))$('#'+id).value=prefs[key];$('#'+id+'-value').value=prefs[key]+' px';}
   $('#lab-auto-contrast').checked=prefs.autoContrast;$('#lab-density-summary').textContent=metrics.rowHeight+' px / 节';
   for(const button of density.querySelectorAll('[data-density]'))button.setAttribute('aria-pressed',String(Object.entries(DENSITY_PRESETS[button.dataset.density]).every(([key,value])=>prefs[key]===value)));
-  renderSubjects();renderPreview(prefs);renderStickers();applyCourseColors(prefs);updateReadability(prefs);
+  if(sheet.open){renderSubjects();renderPreview(prefs);renderStickers();}applyCourseColors(prefs);updateReadability(prefs);
   const source=wallpaper?getComputedStyle(wallpaper).backgroundImage:'none',signature=prefs.wallpaper+'|'+source;if(signature!==lastImage){lastImage=signature;void sampleImage(source);}
  }
  function schedule(){if(frame)return;frame=requestAnimationFrame(()=>{frame=0;refresh();});}

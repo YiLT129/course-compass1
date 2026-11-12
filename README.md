@@ -62,7 +62,7 @@ cd android
 gradle :app:assembleDebug
 ```
 
-也可在Android Studio打开 `android/`，配置SDK与Gradle。当前没有分发Gradle wrapper二进制。输出 `android/app/build/outputs/apk/debug/app-debug.apk`。最低Android8；版本0.7.0（20）。正式分发应使用自己的签名密钥。旧安装更新需同包名、同证书及更高版本号；卸载可能删除本机数据。
+也可在Android Studio打开 `android/`，配置SDK与Gradle。当前没有分发Gradle wrapper二进制。输出 `android/app/build/outputs/apk/debug/app-debug.apk`。最低Android8；版本0.7.1（21）。正式分发应使用自己的签名密钥。旧安装更新需同包名、同证书及更高版本号；卸载可能删除本机数据。
 
 ```sh
 python scripts/verify-apk-startup.py android/app/build/outputs/apk/debug/app-debug.apk

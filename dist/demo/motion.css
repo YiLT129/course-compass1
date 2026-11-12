@@ -1,0 +1,33 @@
+/* Keep live blur on the stationary chrome; sheets and cards use translucent fills. */
+:root{--motion-ease:cubic-bezier(.18,.88,.28,1);--chrome-light:rgba(248,253,255,.72);--sheet-tint:rgba(245,251,254,.96)}
+body.dark{--chrome-light:rgba(24,42,58,.78);--sheet-tint:rgba(23,41,56,.97)}
+.app-header,.bottom-nav{background:var(--chrome-light);backdrop-filter:blur(16px) saturate(145%);-webkit-backdrop-filter:blur(16px) saturate(145%)}
+.source-chip,.info-row button,.live-status,.user-section,.fun-widget-button,.fab,.offline-sheet>.sheet-title,.room-sheet>.sheet-title,.planner-sheet>.sheet-title{backdrop-filter:none;-webkit-backdrop-filter:none}
+.sheet{background:linear-gradient(145deg,rgba(var(--accent-rgb),.06),transparent 50%),var(--sheet-tint);backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:0 12px 38px #0e2e4833,inset 0 1px 0 #fff5}
+.dark .sheet{box-shadow:0 12px 38px #0006,inset 0 1px 0 #fff1}
+.sheet[open]{animation:none}
+.sheet::backdrop{background:rgba(17,37,53,.28);backdrop-filter:none;-webkit-backdrop-filter:none;transition:background-color .145s ease;animation:cc-backdrop-in .16s ease-out}
+.dark .sheet::backdrop{background:rgba(3,12,19,.45)}
+.sheet[data-exiting]{pointer-events:none}
+.sheet[data-exiting]::backdrop,.dark .sheet[data-exiting]::backdrop{background:transparent}
+@keyframes cc-backdrop-in{from{background:transparent}}
+.sheet-handle{position:relative;display:block;width:92px;min-height:25px;height:25px;margin:0 auto 6px;background:none}
+.sheet-handle::after{content:"";position:absolute;left:50%;top:50%;width:38px;height:4px;transform:translate(-50%,-50%);border-radius:99px;background:#8297a47a;pointer-events:none}
+.dark .sheet-handle{background:none}.dark .sheet-handle::after{background:#adc4d077}
+.header-button,.bottom-nav>button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.header-button:active{transform:scale(.93)}
+@media(max-width:760px){
+ .app-header{border-radius:21px}
+ .header-main{height:59px}
+ .bottom-nav{--pill-inset:5px;left:14px;right:14px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;padding:var(--pill-inset);height:60px;border-radius:28px}
+ .bottom-nav::before{content:"";position:absolute;left:var(--pill-inset);top:var(--pill-inset);bottom:var(--pill-inset);width:calc((100% - 2 * var(--pill-inset))/4);border-radius:23px;background:rgba(var(--accent-rgb),.15);box-shadow:inset 0 1px 0 #fff9;transform:translate3d(calc(var(--tab-index,0) * 100%),0,0);transition:transform .23s var(--motion-ease);pointer-events:none}
+ .dark .bottom-nav::before{background:rgba(var(--accent-rgb),.21);box-shadow:inset 0 1px 0 #fff2}
+ .bottom-nav>button{position:relative;min-height:44px;height:100%;padding:0 2px;gap:3px;transition:color .15s ease,transform .16s var(--motion-ease)}
+ .bottom-nav>button.selected{background:none;box-shadow:none}
+ .bottom-nav>button:active{transform:scale(.94)}
+ .bottom-nav span{font-size:10px}
+ .bottom-nav svg{width:22px;height:22px}
+ .sheet{border-radius:26px;padding-top:6px}
+}
+@media(max-width:360px){.header-main{height:54px}.bottom-nav{left:9px;right:9px}}
+@media(prefers-reduced-motion:reduce){.sheet::backdrop{animation:none;transition:none}.bottom-nav::before{transition:none}}
