@@ -1,6 +1,7 @@
 package cn.coursecompass.app;
 
 import java.util.List;
+import java.util.Set;
 
 public final class PlannerQueueCheck {
  static final long NOW=1893456000000L;
@@ -43,6 +44,33 @@ public final class PlannerQueueCheck {
   check(batch.size()==100,"one batch must retain all simultaneous reminders");
   var currentBatch=PlannerQueue.selectByKey(List.of(row("many-1",moved.at),crowd.get(2)),PlannerQueue.keys(batch));
   check(currentBatch.size()==1&&currentBatch.get(0).id.equals("many-2"),"a notification batch must discard edited and removed occurrences");
+  // The old plan dropped the last alarm as soon as it was due, even if the foreground
+  // page never painted/acknowledged it. The hand-off must stay armed in the system.
+  long dueAt=first.at;
+  long deadline=dueAt+PlannerQueue.HANDOFF_MS;
+  var handoff=PlannerQueue.alarmPlan(queue,dueAt,true,true,true);
+  check(handoff.exactAt==0&&handoff.fallbackAt==0&&handoff.retryAt==deadline,
+     "unacknowledged foreground dispatch must retain an independent timed backup");
+  var following=row("following",dueAt+60000);
+  var separated=PlannerQueue.alarmPlan(List.of(first,following),dueAt,true,true,true);
+  check(separated.exactAt==following.at&&separated.fallbackAt>following.at&&separated.retryAt==deadline,
+     "foreground handoff cannot replace the next exact system alarm");
+  check(PlannerQueue.systemDue(queue,dueAt,true,true).isEmpty(),"foreground has a brief chance to present its dialog");
+  check(PlannerQueue.systemDue(queue,deadline,true,true).size()==2,"stale foreground cannot suppress the system forever");
+  check(PlannerQueue.systemDue(queue,dueAt,false,true).size()==2,"new process can notify without an Activity");
+  check(PlannerQueue.systemDue(queue,dueAt,false,false).isEmpty(),"never try system notifications without consent");
+  var ack=PlannerQueue.acknowledge(queue,Set.of(first.key(),moved.key()),dueAt);
+  check(PlannerQueue.systemDue(ack,deadline,true,true).size()==1,"ack matches only the shown occurrence; other items still notify");
+  check(PlannerQueue.systemDue(ack,deadline,true,true).get(0).id.equals(second.id),"already shown dialogs do not get a duplicate notification");
+  var newDay=PlannerQueue.alarmPlan(queue,NOW,true,true,true);
+  check(newDay.exactAt==first.at&&newDay.retryAt==0,"the next user-specified precise reminder is a platform clock alarm");
+  var test=PlannerQueue.withTest(queue,first.at);
+  var afterSync=PlannerQueue.replace(test,List.of(first,second),NOW);
+  check(PlannerQueue.foregroundDue(afterSync,first.at).size()==2,"the one-minute test always uses the system channel");
+  check(PlannerQueue.systemDue(afterSync,first.at,true,true).stream().filter(PlannerQueue.Entry::isTest).count()==1,
+     "editing actual plans cannot drop the independently scheduled test");
+  check(PlannerQueue.systemDue(PlannerQueue.markDelivered(afterSync,PlannerQueue.systemDue(afterSync,first.at,true,true)),deadline,true,true).size()==2,
+     "a test is sent only once and never consumes real plans");
   System.out.println("PlannerQueue checks passed");
  }
 }

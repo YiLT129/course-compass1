@@ -4,7 +4,7 @@
 
 ## 功能
 
-- 日程规划：自选日期和时间，到点弹窗；Android 支持独立的后台通知。日程可编辑、删除和随完整备份迁移。
+- 日程规划：独立周历、按日时间线、日期跳转和下一条日程。Android 支持后台系统通知、准点闹钟和一键测试；日程可随完整备份迁移。
 
 - 完全本机截图识别：中英OCR内置，先校准截图课程区、修改草稿并核对后导入，只更新所选周次/区域。
 - 长按拖动调课：按课块选择单次或后续已排周，冲突先核对；原始教务记录不改，可恢复。
@@ -62,7 +62,7 @@ cd android
 gradle :app:assembleDebug
 ```
 
-也可在Android Studio打开 `android/`，配置SDK与Gradle。当前没有分发Gradle wrapper二进制。输出 `android/app/build/outputs/apk/debug/app-debug.apk`。最低Android8；版本0.7.1（21）。正式分发应使用自己的签名密钥。旧安装更新需同包名、同证书及更高版本号；卸载可能删除本机数据。
+也可在Android Studio打开 `android/`，配置SDK与Gradle。当前没有分发Gradle wrapper二进制。输出 `android/app/build/outputs/apk/debug/app-debug.apk`。最低Android8；版本0.8.0（22）。正式分发应使用自己的签名密钥。旧安装更新需同包名、同证书及更高版本号；卸载可能删除本机数据。
 
 ```sh
 python scripts/verify-apk-startup.py android/app/build/outputs/apk/debug/app-debug.apk

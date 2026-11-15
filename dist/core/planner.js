@@ -29,6 +29,14 @@ export function readPlanner(storage=localStorage){
  return raw===null?{version:1,entries:[]}:validatePlanner(JSON.parse(raw));
 }
 
+// Android commits the model and queue before returning. Browser storage is still
+// used for the web and as the migration source for Android releases before 0.8.
+export function readNativePlanner(bridge=globalThis.CourseCompass){
+ if(typeof bridge?.getPlannerModel!=='function')return null;
+ const raw=JSON.parse(bridge.getPlannerModel());
+ return raw===null?null:validatePlanner(raw);
+}
+
 export function parsePlannerTime(date,time,originalAt){
  if(!/^20[0-9]{2}-[0-9]{2}-[0-9]{2}$/.test(date))throw Error('请选择有效日期');
  if(!/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(time))throw Error('请选择有效时间');

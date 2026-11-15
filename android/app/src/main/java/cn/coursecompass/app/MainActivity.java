@@ -127,7 +127,10 @@ public class MainActivity extends Activity {
   try{startupStage="启动本地页面";appView.loadUrl("https://"+APP_HOST+"/assets/demo/index.html"+appEntryHash(getIntent()));}catch(Exception error){showStartupError(startupStage,error);}
  }
  private static String appEntryHash(Intent intent){
-  if(PlannerReminders.ACTION_OPEN.equals(intent.getAction()))return "#planner";
+  if(PlannerReminders.ACTION_OPEN.equals(intent.getAction())){
+   long at=intent.getLongExtra(PlannerReminders.EXTRA_AT,0);
+   return at>0&&at<PlannerQueue.MAX_AT?"#planner="+at:"#planner";
+  }
   return "cn.coursecompass.app.ROOM_CARD".equals(intent.getAction())?"#room":"";
  }
  private WebResourceResponse localResponse(Uri uri){
@@ -140,7 +143,7 @@ public class MainActivity extends Activity {
  }
  private void showStartupError(String stage,Exception error){
   Log.e("CourseCompassStartup",stage,error);
-  String details="课间 0.7.1 · 启动诊断\n\n阶段："+stage+"\n设备："+Build.MANUFACTURER+" "+Build.MODEL+" / Android "+Build.VERSION.RELEASE+"\n错误："+error.getClass().getName()+"\n"+String.valueOf(error.getMessage());
+  String details="课间 0.8.0 · 启动诊断\n\n阶段："+stage+"\n设备："+Build.MANUFACTURER+" "+Build.MODEL+" / Android "+Build.VERSION.RELEASE+"\n错误："+error.getClass().getName()+"\n"+String.valueOf(error.getMessage());
   for(StackTraceElement frame:error.getStackTrace())if(frame.getClassName().startsWith("cn.coursecompass"))details+="\n"+frame.toString();
   LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(28,100,28,40);
   TextView title=new TextView(this);title.setText("应用启动遇到问题");title.setTextSize(21);box.addView(title);
@@ -173,12 +176,16 @@ public class MainActivity extends Activity {
    if(saved)runOnUiThread(()->{plannerReady=true;refreshPlannerFocus();});
    return saved;
   }
+  @JavascriptInterface public String getPlannerModel(){return PlannerReminders.model(MainActivity.this);}
+  @JavascriptInterface public void plannerPageReady(){runOnUiThread(()->{plannerReady=true;refreshPlannerFocus();});}
   @JavascriptInterface public String getPlannerStatus(){return PlannerReminders.status(MainActivity.this);}
-  @JavascriptInterface public String takePlannerReminders(){
-   String items=PlannerReminders.takeForeground(MainActivity.this);
-   if(!"[]".equals(items))runOnUiThread(()->PlannerReminders.refresh(MainActivity.this));
-   return items;
-  }
+  @JavascriptInterface public String peekPlannerReminders(){return PlannerReminders.peekForeground(MainActivity.this);}
+  @JavascriptInterface public boolean acknowledgePlannerReminders(String text){return PlannerReminders.acknowledgeForeground(MainActivity.this,text);}
+  @JavascriptInterface public long testPlannerNotification(){return PlannerReminders.startTest(MainActivity.this);}
+  @JavascriptInterface public void openPlannerAppSettings(){runOnUiThread(()->{
+   try{startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}
+   catch(Exception unavailable){Toast.makeText(MainActivity.this,"请在系统设置中打开课间的应用详情",Toast.LENGTH_LONG).show();}
+  });}
   @JavascriptInterface public void requestPlannerNotifications(){runOnUiThread(MainActivity.this::enablePlannerNotifications);}
   @JavascriptInterface public void requestPlannerExact(){runOnUiThread(MainActivity.this::enablePlannerExact);}
   @JavascriptInterface public void updateSchedule(String text){runOnUiThread(()->{try{CourseCompanion.update(MainActivity.this,text);}catch(Exception error){companionChanged("课程卡片同步失败，请检查学期与作息");}});}
@@ -223,6 +230,9 @@ public class MainActivity extends Activity {
  private void refreshPlannerFocus(){
   PlannerReminders.setForeground(this,plannerResumed&&plannerReady&&appView!=null&&hasWindowFocus());
   PlannerReminders.refresh(this);
+  plannerChanged();
+ }
+ void plannerChanged(){
   if(plannerReady&&plannerResumed&&appView!=null)appView.evaluateJavascript("window.onNativePlannerChanged?.()",null);
  }
  private void enablePlannerNotifications(){
@@ -409,7 +419,7 @@ public class MainActivity extends Activity {
  }
  private void copyPortalReport(){
   Uri uri=portalView==null?null:Uri.parse(portalView.getUrl()==null?"":portalView.getUrl());
-  String report="课间 0.7.1 · 读取诊断\n设备："+Build.MANUFACTURER+" "+Build.MODEL+" / Android "+Build.VERSION.RELEASE+"\n页面："+(uri==null?"未知":uri.getHost()+String.valueOf(uri.getPath()))+"\n提前采集："+earlyCollector+"\n受限帧消息："+frameMessages+"\n已注入页面数："+capturedFrames+"\n查询数："+capturedRequests+"\n捕获课表数据："+(capturedTimetable!=null)+"\n读取进行中："+reading+"\n同步学期：自动 · "+(gradeScopeKnown?gradeScope():"待识别学校页面")+"\n成绩页面状态："+gradeState+"\n成绩读取方式："+gradeSource+"\n页面识别门数："+gradePageRecords+"\n成绩读取说明："+gradeReason;
+  String report="课间 0.8.0 · 读取诊断\n设备："+Build.MANUFACTURER+" "+Build.MODEL+" / Android "+Build.VERSION.RELEASE+"\n页面："+(uri==null?"未知":uri.getHost()+String.valueOf(uri.getPath()))+"\n提前采集："+earlyCollector+"\n受限帧消息："+frameMessages+"\n已注入页面数："+capturedFrames+"\n查询数："+capturedRequests+"\n捕获课表数据："+(capturedTimetable!=null)+"\n读取进行中："+reading+"\n同步学期：自动 · "+(gradeScopeKnown?gradeScope():"待识别学校页面")+"\n成绩页面状态："+gradeState+"\n成绩读取方式："+gradeSource+"\n页面识别门数："+gradePageRecords+"\n成绩读取说明："+gradeReason;
   android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);clipboard.setPrimaryClip(android.content.ClipData.newPlainText("课间读取诊断",report));Toast.makeText(this,"诊断已复制，不包含验证码、Cookie 或课表内容",Toast.LENGTH_LONG).show();
  }
  @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==42){if(fileCallback!=null){fileCallback.onReceiveValue(result==RESULT_OK&&data!=null&&data.getData()!=null?new Uri[]{data.getData()}:null);fileCallback=null;}return;}if(request!=41)return;String content=pendingExport;byte[] bytes=pendingBinary;pendingExport=null;pendingBinary=null;if(result!=RESULT_OK||data==null||content==null&&bytes==null)return;try(OutputStream stream=getContentResolver().openOutputStream(data.getData())){if(stream==null)throw new Exception();if(bytes!=null)stream.write(bytes);else{java.io.Writer writer=new java.io.OutputStreamWriter(stream,StandardCharsets.UTF_8);writer.write(content);writer.flush();}appView.evaluateJavascript("window.onNativeExportResult&&window.onNativeExportResult('文件已保存')",null);}catch(Exception ignored){appView.evaluateJavascript("window.onNativeExportResult&&window.onNativeExportResult('保存失败，请重试')",null);}}

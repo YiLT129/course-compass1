@@ -2,14 +2,15 @@ import {allowedKey,STATE_KEYS,MAX_PACKAGE,validatePackage,validateTheme,themeFro
 import {readAssets,commitRestore,saveTheme,deleteTheme,recoveryRecord,commitUpgradeSnapshot,writeRecoveryRecord} from './assets.js';
 import {validateAppearance} from '../core/appearance.js';
 import {IMPORT_HISTORY_KEY} from '../core/import-history.js';
-import {PLANNER_KEY,archiveRestoredPlans} from '../core/planner.js';
+import {PLANNER_KEY,archiveRestoredPlans,readNativePlanner,validatePlanner} from '../core/planner.js';
 const $=s=>document.querySelector(s),E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function downloadText(name,text){if(window.CourseCompass?.saveFile){window.CourseCompass.saveFile(name,'application/json',text);return;}const url=URL.createObjectURL(new Blob([text],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);}
 async function resource(blob){if(!blob)return null;const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});return {type:blob.type,data};}
 function blob(r){if(!r)return null;const text=atob(r.data),bytes=new Uint8Array(text.length);for(let i=0;i<text.length;i++)bytes[i]=text.charCodeAt(i);return new Blob([bytes],{type:r.type});}
 async function decodeAssets(value){async function check(imageBlob){if(!imageBlob)return;const url=URL.createObjectURL(imageBlob);try{const image=new Image();image.src=url;await image.decode();if(image.naturalWidth*image.naturalHeight>60000000)throw Error('备份图片尺寸过大');}finally{URL.revokeObjectURL(url);}}const images={};for(const k of ['wallpaper','original']){images[k]=blob(value.assets[k]);await check(images[k]);}for(const theme of value.themes)await check(blob(theme.wallpaper));return {images,themes:value.themes,history:value.state[IMPORT_HISTORY_KEY]?JSON.parse(value.state[IMPORT_HISTORY_KEY]):null};}
-export async function captureBackup(appVersion='0.7.1'){
+export async function captureBackup(appVersion='0.8.0'){
  const state={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(allowedKey(k))state[k]=localStorage.getItem(k);}
+ const planner=readNativePlanner();if(planner)state[PLANNER_KEY]=JSON.stringify(planner);
  if(window.CourseCompass?.getWidgetConfigs){const widgets=JSON.parse(window.CourseCompass.getWidgetConfigs());if(widgets.length)state['course-compass.widget-presets.v1']=JSON.stringify(widgets);}
  const {images,themes,history}=await readAssets();if(history)state[IMPORT_HISTORY_KEY]=JSON.stringify(history);return validatePackage({format:'course-compass.backup',version:1,appVersion,createdAt:new Date().toISOString(),state,assets:{wallpaper:await resource(images.wallpaper),original:await resource(images.original)},themes});
 }
@@ -22,11 +23,23 @@ export async function maybeCreateUpgradeBackup(version){
 }
 export async function createUpgradeRecovery(targetVersion){
  if(!/^\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?$/i.test(targetVersion))throw Error('目标版本无效');
- const previous=await recoveryRecord('app-version'),backup=await captureBackup(typeof previous==='string'?previous:'0.7.1');
+ const previous=await recoveryRecord('app-version'),backup=await captureBackup(typeof previous==='string'?previous:'0.8.0');
  const snapshot={version:1,fromVersion:typeof previous==='string'?previous:null,toVersion:targetVersion,createdAt:new Date().toISOString(),backup};
  await writeRecoveryRecord('upgrade-backup',snapshot);return snapshot;
 }
-export function setupPackages({notify,openSheet,refreshAppearance,afterRestore=()=>{}}){
+export async function recoverPlannerRestore(){
+ const native=window.CourseCompass;
+ if(typeof native?.getPlannerModel!=='function')return true;
+ try{
+  const pending=await recoveryRecord('planner-restore');
+  if(!pending)return true;
+  const value=validatePlanner(pending);
+  if(native.updatePlanner(JSON.stringify(value),'',0)!==true)return false;
+  await writeRecoveryRecord('planner-restore',null);
+  return true;
+ }catch{return false;}
+}
+export function setupPackages({notify,openSheet,refreshAppearance,afterRestore=()=>{},onPendingPlannerRestore=()=>{}}){
  let pending=null,pendingURL=null,busy=false;
  function error(e){$('#package-error').textContent=e.message;notify(e.message);}
  async function apply(value,full=false){
@@ -36,9 +49,13 @@ export function setupPackages({notify,openSheet,refreshAppearance,afterRestore=(
    const config=value.state['course-compass.school.v1']||'{"id":"gzist-zfsoft"}';if(full&&window.CourseCompass?.setSchool){if(!window.CourseCompass.setSchool(config))throw Error('学校配置无法恢复，未替换本机数据');switched=true;}
    const planner=full?value.state[PLANNER_KEY]:null;
    const state=planner?{...value.state,[PLANNER_KEY]:JSON.stringify(archiveRestoredPlans(JSON.parse(planner)))}:value.state;
+   if(full&&typeof window.CourseCompass?.getPlannerModel==='function')assets.plannerRestore=planner?JSON.parse(state[PLANNER_KEY]):{version:1,entries:[]};
    await commitRestore(state,assets,keys);switched=false;
    if(full&&window.CourseCompass?.getWidgetConfigs&&window.CourseCompass?.setWidgetConfig){const ids=new Set(JSON.parse(window.CourseCompass.getWidgetConfigs()).map(x=>x.id)),presets=JSON.parse(value.state['course-compass.widget-presets.v1']||'[]');for(const w of presets)if(ids.has(w.id))window.CourseCompass.setWidgetConfig(w.id,JSON.stringify(w));}
-   if(full){afterRestore();notify('完整备份已恢复，正在重新打开课间');location.reload();}
+   if(full){
+    if(!await recoverPlannerRestore()){onPendingPlannerRestore();throw Error('课表已恢复，安卓日程尚待登记。可在日程页重试。');}
+    afterRestore();notify('完整备份已恢复，正在重新打开课间');location.reload();
+   }
    else {await refreshAppearance();$('#package-preview').hidden=true;pending=null;notify('主题已应用，课表和个人记录已保留');}
   }catch(e){if(switched)window.CourseCompass.setSchool(oldSchool);error(e);}finally{busy=false;$('#package-apply').disabled=false;}
  }

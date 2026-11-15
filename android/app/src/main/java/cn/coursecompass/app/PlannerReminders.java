@@ -2,6 +2,7 @@ package cn.coursecompass.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -28,30 +29,52 @@ import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/** Persists a local mirror of the planner so alarms can run without a WebView. */
+/** Owns the Android planner data and its one-shot queue, even without a WebView. */
 final class PlannerReminders {
  static final String CHANNEL="personal_planner_v1";
  static final String ACTION_DUE="cn.coursecompass.app.PLANNER_DUE";
  static final String ACTION_OPEN="cn.coursecompass.app.OPEN_PLANNER";
  private static final String EMPTY="{\"version\":1,\"entries\":[]}";
+ private static final String MODEL="planner-model", SCHEDULE="schedule";
  private static final String NOTIFICATION_KEYS="cn.coursecompass.app.planner-keys";
- private static final int EXACT_ALARM=6411, OPEN=6412, NOTIFICATION=6413, FALLBACK_ALARM=6414;
- private static WeakReference<Activity> foreground=new WeakReference<>(null);
+ static final String EXTRA_AT="planner-reminder-at";
+ private static final int EXACT_ALARM=6411, OPEN=6412, NOTIFICATION=6413, FALLBACK_ALARM=6414, CLOCK_OPEN=6415, TEST_NOTIFICATION=6416, HANDOFF_ALARM=6417;
+ private static final android.os.Handler main=new android.os.Handler(android.os.Looper.getMainLooper());
+ private static volatile Context appContext;
+ private static final Runnable retryInProcess=()->{Context context=appContext;if(context!=null)refreshFromWake(context,false);};
+ private static WeakReference<MainActivity> foreground=new WeakReference<>(null);
+ private static Set<String> recentPost=Collections.emptySet();
+ private static long recentPostAt;
+ private static long registeredAt,registeredBackupAt;
+ private static String registeredMode="none";
 
  private static SharedPreferences prefs(Context c){return c.getSharedPreferences("personal-planner",Context.MODE_PRIVATE);}
 
- static synchronized void setForeground(Activity activity,boolean ready){
+ static synchronized void setForeground(MainActivity activity,boolean ready){
   if(ready)foreground=new WeakReference<>(activity);
   else if(foreground.get()==activity)foreground.clear();
  }
 
- static String status(Context c){
+ static synchronized String status(Context c){
   try{
    NotificationManager manager=c.getSystemService(NotificationManager.class);
    NotificationChannel channel=manager.getNotificationChannel(CHANNEL);
    boolean allowed=notificationsAllowed(c,manager,channel);
-   return new JSONObject().put("notifications",allowed).put("exact",CourseCompanion.exactAllowed(c))
-     .put("headsUp",allowed&&(channel==null||channel.getImportance()>=NotificationManager.IMPORTANCE_HIGH)).toString();
+   SharedPreferences saved=prefs(c);
+   JSONObject status=new JSONObject().put("notifications",allowed).put("exact",CourseCompanion.exactAllowed(c))
+     .put("headsUp",allowed&&(channel==null||channel.getImportance()>=NotificationManager.IMPORTANCE_HIGH))
+     .put("nextAt",PlannerQueue.nextAt(read(c),System.currentTimeMillis()))
+     .put("alarmAt",saved.getLong("alarm-at",0)).put("alarmMode",saved.getString("alarm-mode","none"))
+     .put("retryAt",saved.getLong("retry-at",0))
+     .put("lastWakeAt",saved.getLong("last-wake-at",0)).put("lastSystemAt",saved.getLong("last-system-at",0))
+     .put("lastPopupAt",saved.getLong("last-popup-at",0))
+     .put("backgroundRestricted",Build.VERSION.SDK_INT>=28&&c.getSystemService(ActivityManager.class).isBackgroundRestricted());
+   for(PlannerQueue.Entry row:read(c))if(row.isTest()){
+    status.put("testAt",row.at).put("testSent",row.delivered)
+      .put("testSource",saved.getString("test-source",""));
+    break;
+   }
+   return status.toString();
   }catch(Exception failure){return "null";}
  }
 
@@ -70,63 +93,179 @@ final class PlannerReminders {
 
  static synchronized boolean replace(Context c,String text,String savedId,long savedAt){
   try{
-   List<PlannerQueue.Entry> incoming=parse(text,false),previous;
+   Set<String> history=new HashSet<>();
+   List<PlannerQueue.Entry> model=parse(text,false,history),incoming=new ArrayList<>(),previous;
+   for(PlannerQueue.Entry row:model)if(!history.contains(row.id))incoming.add(row);
    try{previous=read(c);}catch(Exception corrupt){previous=new ArrayList<>();}
    List<PlannerQueue.Entry> updated=PlannerQueue.replace(previous,incoming,System.currentTimeMillis(),savedId,savedAt);
-   if(!write(c,updated))return false;
+   JSONArray publicRows=encode(model,false);
+   for(int i=0;i<model.size();i++)if(history.contains(model.get(i).id))publicRows.getJSONObject(i).put("historical",true);
+   String value=new JSONObject().put("version",1).put("entries",publicRows).toString();
+   // Commit both copies in one write. Stale WebView cache cannot undo a successful save.
+   if(!prefs(c).edit().putString(MODEL,value).putString(SCHEDULE,queueJson(updated)).commit())return false;
    try{reconcileNotification(c,previous,updated);}catch(Exception unavailable){Log.w("CourseCompassPlanner","Could not update the visible notification");}
+   // The system alarm must be registered before the WebView reports a saved plan.
+   refresh(c);
    return true;
   }catch(Exception invalid){return false;}
  }
 
- static synchronized String takeForeground(Activity activity){
+ static synchronized String model(Context c){return prefs(c).getString(MODEL,"null");}
+
+ static synchronized String peekForeground(Activity activity){
   if(foreground.get()!=activity)return "[]";
   try{
-   List<PlannerQueue.Entry> rows=read(activity);
-   List<PlannerQueue.Entry> due=PlannerQueue.due(rows,System.currentTimeMillis());
-   if(!due.isEmpty()){
-    JSONArray result=encode(due,false);
-    if(write(activity,PlannerQueue.markDelivered(rows,due)))return result.toString();
-   }
-  }catch(Exception error){Log.w("CourseCompassPlanner","Could not claim foreground reminders");}
+   return encode(PlannerQueue.foregroundDue(read(activity),System.currentTimeMillis()),false).toString();
+  }catch(Exception error){Log.w("CourseCompassPlanner","Could not read foreground reminders");}
   return "[]";
  }
 
+ static synchronized boolean acknowledgeForeground(Activity activity,String text){
+  if(foreground.get()!=activity||text==null||text.length()>12000)return false;
+  try{
+   JSONArray data=new JSONArray(text);
+   if(data.length()<1||data.length()>PlannerQueue.MAX_ENTRIES)return false;
+   Set<String> keys=new HashSet<>();
+   for(int i=0;i<data.length();i++)keys.add(string(data.get(i)));
+   List<PlannerQueue.Entry> rows=read(activity);
+   long now=System.currentTimeMillis();
+   if(PlannerQueue.selectByKey(PlannerQueue.foregroundDue(rows,now),keys).isEmpty())return false;
+   if(!write(activity,PlannerQueue.acknowledge(rows,keys,now)))return false;
+   prefs(activity).edit().putLong("last-popup-at",now).apply();
+   refresh(activity);
+   return true;
+  }catch(Exception invalid){return false;}
+ }
+
+ static synchronized long startTest(Context c){
+  try{
+   ensureChannel(c);
+   NotificationManager manager=c.getSystemService(NotificationManager.class);
+   if(!notificationsAllowed(c,manager,manager.getNotificationChannel(CHANNEL)))return 0;
+   long at=System.currentTimeMillis()+60000;
+   if(!write(c,PlannerQueue.withTest(read(c),at)))return 0;
+   prefs(c).edit().remove("test-source").apply();
+   manager.cancel(TEST_NOTIFICATION);
+   refresh(c);
+   SharedPreferences saved=prefs(c);
+   return saved.getLong("alarm-at",0)>0?at:0;
+  }catch(Exception unavailable){return 0;}
+ }
+
+ static synchronized void onAlarm(Context c){
+  prefs(c).edit().putLong("last-wake-at",System.currentTimeMillis()).apply();
+  refreshFromWake(c,true);
+ }
+
+ private static synchronized void refreshFromWake(Context c,boolean systemWake){
+  refresh(c,systemWake);
+  MainActivity active=foreground.get();
+  if(active!=null)active.runOnUiThread(active::plannerChanged);
+ }
+
  static synchronized void refresh(Context c){
+  refresh(c,false);
+ }
+
+ private static void refresh(Context c,boolean systemWake){
   try{
    List<PlannerQueue.Entry> rows=read(c);
    long now=System.currentTimeMillis();
    ensureChannel(c);
    NotificationManager manager=c.getSystemService(NotificationManager.class);
    boolean allowed=notificationsAllowed(c,manager,manager.getNotificationChannel(CHANNEL));
-   if(allowed&&foreground.get()==null){
-    List<PlannerQueue.Entry> due=PlannerQueue.due(rows,now);
-    if(!due.isEmpty()){
-     Set<String> active=activeKeys(manager);
-     boolean buzz=active.addAll(PlannerQueue.keys(due));
-     try{
-      manager.notify(NOTIFICATION,notification(c,PlannerQueue.selectByKey(rows,active),buzz));
-      rows=PlannerQueue.markDelivered(rows,due);
-      write(c,rows);
-     }catch(SecurityException revoked){/* Keep the receipt pending if permission changed. */}
+   boolean inApp=foreground.get()!=null;
+   List<PlannerQueue.Entry> due=PlannerQueue.systemDue(rows,now,inApp,allowed);
+   List<PlannerQueue.Entry> sent=new ArrayList<>(),normal=new ArrayList<>();
+   for(PlannerQueue.Entry row:due)if(!row.isTest())normal.add(row);else try{
+    manager.notify(TEST_NOTIFICATION,notification(c,Collections.singletonList(row),true));
+    sent.add(row);
+   }catch(SecurityException revoked){/* Keep pending. */}
+   if(!normal.isEmpty())try{
+    Set<String> active=activeKeys(manager);
+    boolean buzz=active.addAll(PlannerQueue.keys(normal));
+    postNormal(c,manager,PlannerQueue.selectByKey(rows,active),buzz);
+    sent.addAll(normal);
+   }catch(SecurityException revoked){/* Keep pending. */}
+   if(!sent.isEmpty()&&write(c,PlannerQueue.markDelivered(rows,sent))){
+    rows=PlannerQueue.markDelivered(rows,sent);
+    SharedPreferences.Editor log=prefs(c).edit().putLong("last-system-at",now);
+    for(PlannerQueue.Entry row:sent)if(row.isTest()){
+     log.putString("test-source",systemWake?(inApp?"alarm-visible":"alarm-background"):"refresh");
+     break;
     }
+    log.apply();
    }
-   schedule(c,PlannerQueue.alarmPlan(rows,now,allowed&&CourseCompanion.exactAllowed(c)));
-  }catch(Exception error){Log.w("CourseCompassPlanner","Could not refresh reminder schedule");}
+   boolean exact=CourseCompanion.exactAllowed(c);
+   PlannerQueue.AlarmPlan plan=PlannerQueue.alarmPlan(rows,now,allowed&&exact,inApp,allowed);
+   scheduleNext(c,plan);
+   scheduleRetry(c,plan.retryAt,exact);
+  }catch(Exception error){
+   logAlarm(c,0,"error");
+   Log.w("CourseCompassPlanner","Could not refresh reminder schedule: "+error.getClass().getSimpleName());
+  }
  }
 
- private static void schedule(Context c,PlannerQueue.AlarmPlan plan){
+ private static void scheduleNext(Context c,PlannerQueue.AlarmPlan plan){
   AlarmManager alarms=c.getSystemService(AlarmManager.class);
   // Android revokes exact alarms when special access is removed. A separate inexact
   // wake-up survives that change, and also works if notifications are enabled later.
-  long fallback=plan.fallbackAt;
-  if(fallback>0)alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,fallback,alarm(c,FALLBACK_ALARM,true));
-  else cancel(c,alarms,FALLBACK_ALARM);
   if(plan.exactAt>0){
-   try{alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,plan.exactAt,alarm(c,EXACT_ALARM,true));return;}
-   catch(SecurityException revoked){alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,plan.exactAt,alarm(c,FALLBACK_ALARM,true));}
+   long at=plan.exactAt;
+   if(registeredAt==at&&registeredBackupAt==plan.fallbackAt&&"clock".equals(registeredMode)){
+    logAlarm(c,at,"clock");
+    return;
+   }
+   try{
+    PendingIntent operation=alarm(c,EXACT_ALARM,true);
+    alarms.setAlarmClock(new AlarmManager.AlarmClockInfo(at,open(c,CLOCK_OPEN,at)),operation);
+    long backup=0;
+    try{alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,plan.fallbackAt,alarm(c,FALLBACK_ALARM,true));backup=plan.fallbackAt;}
+    catch(RuntimeException unavailable){Log.w("CourseCompassPlanner","Ordinary backup could not be registered");}
+    rememberAlarm(c,at,backup,"clock");
+    return;
+   }catch(RuntimeException revoked){
+    cancel(c,alarms,EXACT_ALARM);
+    alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,alarm(c,FALLBACK_ALARM,true));
+    rememberAlarm(c,at,at,"ordinary");
+    return;
+   }
   }
   cancel(c,alarms,EXACT_ALARM);
+  if(plan.fallbackAt>0){
+   if(registeredAt!=plan.fallbackAt||!"ordinary".equals(registeredMode))
+    alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,plan.fallbackAt,alarm(c,FALLBACK_ALARM,true));
+   rememberAlarm(c,plan.fallbackAt,plan.fallbackAt,"ordinary");
+  }else{cancel(c,alarms,FALLBACK_ALARM);rememberAlarm(c,0,0,"none");}
+ }
+
+ private static void rememberAlarm(Context c,long at,long backup,String mode){
+  registeredAt=at;registeredBackupAt=backup;registeredMode=mode;
+  logAlarm(c,at,mode);
+ }
+
+ private static void scheduleRetry(Context c,long retryAt,boolean exact){
+  AlarmManager alarms=c.getSystemService(AlarmManager.class);
+  main.removeCallbacks(retryInProcess);
+  if(retryAt<=0)cancel(c,alarms,HANDOFF_ALARM);
+  else{
+   appContext=c.getApplicationContext();
+   PendingIntent pending=alarm(c,HANDOFF_ALARM,true);
+   // Also retain a real OS wake-up if this process disappears during the hand-off.
+   try{
+    if(exact)alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,retryAt,pending);
+    else alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,retryAt,pending);
+   }catch(SecurityException revoked){alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,retryAt,pending);}
+   if(foreground.get()!=null)main.postDelayed(retryInProcess,Math.max(0,retryAt-System.currentTimeMillis()));
+  }
+  SharedPreferences saved=prefs(c);
+  if(retryAt!=saved.getLong("retry-at",0))saved.edit().putLong("retry-at",retryAt).apply();
+ }
+
+ private static void logAlarm(Context c,long at,String mode){
+  SharedPreferences saved=prefs(c);
+  if(at!=saved.getLong("alarm-at",0)||!mode.equals(saved.getString("alarm-mode","none")))
+   saved.edit().putLong("alarm-at",at).putString("alarm-mode",mode).apply();
  }
 
  private static PendingIntent alarm(Context c,int id,boolean create){
@@ -147,7 +286,14 @@ final class PlannerReminders {
     if(saved!=null)Collections.addAll(keys,saved);
    }
   }
+  if(android.os.SystemClock.elapsedRealtime()-recentPostAt<1500)keys.addAll(recentPost);
   return keys;
+ }
+
+ private static void postNormal(Context c,NotificationManager manager,List<PlannerQueue.Entry> rows,boolean buzz){
+  manager.notify(NOTIFICATION,notification(c,rows,buzz));
+  recentPost=PlannerQueue.keys(rows);
+  recentPostAt=android.os.SystemClock.elapsedRealtime();
  }
 
  private static void reconcileNotification(Context c,List<PlannerQueue.Entry> previous,List<PlannerQueue.Entry> current)throws Exception{
@@ -155,17 +301,21 @@ final class PlannerReminders {
   Set<String> keys=activeKeys(manager);
   if(keys.isEmpty())return;
   List<PlannerQueue.Entry> stillActive=PlannerQueue.selectByKey(current,keys);
-  if(stillActive.isEmpty())manager.cancel(NOTIFICATION);
+  if(stillActive.isEmpty()){manager.cancel(NOTIFICATION);recentPost=Collections.emptySet();}
   else if(!encode(stillActive,false).toString().equals(encode(PlannerQueue.selectByKey(previous,keys),false).toString()))
-   manager.notify(NOTIFICATION,notification(c,stillActive,false));
+   postNormal(c,manager,stillActive,false);
+ }
+
+ private static PendingIntent open(Context c,int code,long at){
+  Intent intent=new Intent(c,MainActivity.class).setAction(ACTION_OPEN)
+    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra(EXTRA_AT,at);
+  return PendingIntent.getActivity(c,code,intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
  }
 
  private static Notification notification(Context c,List<PlannerQueue.Entry> rows,boolean buzz){
-  Intent intent=new Intent(c,MainActivity.class).setAction(ACTION_OPEN)
-    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
-  PendingIntent open=PendingIntent.getActivity(c,OPEN,intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
   DateTimeFormatter clock=DateTimeFormatter.ofPattern("M月d日 HH:mm",Locale.CHINA).withZone(ZoneId.systemDefault());
   PlannerQueue.Entry latest=rows.get(rows.size()-1);
+  PendingIntent open=open(c,latest.isTest()?TEST_NOTIFICATION:OPEN,latest.isTest()?0:latest.at);
   Notification publicView=new Notification.Builder(c,CHANNEL).setSmallIcon(R.drawable.ic_course_status)
     .setContentTitle("课间 · 日程提醒").setContentText("解锁后查看详情").setContentIntent(open).build();
   Bundle extras=new Bundle();
@@ -190,13 +340,17 @@ final class PlannerReminders {
  }
 
  private static List<PlannerQueue.Entry> read(Context c)throws Exception{
-  return parse(prefs(c).getString("schedule",EMPTY),true);
+  return parse(prefs(c).getString(SCHEDULE,EMPTY),true,null);
+ }
+
+ private static String queueJson(List<PlannerQueue.Entry> rows)throws Exception{
+  return new JSONObject().put("version",1).put("entries",encode(rows,true)).toString();
  }
 
  private static boolean write(Context c,List<PlannerQueue.Entry> rows)throws Exception{
-  String value=new JSONObject().put("version",1).put("entries",encode(rows,true)).toString();
+  String value=queueJson(rows);
   SharedPreferences pref=prefs(c);
-  return value.equals(pref.getString("schedule",EMPTY))||pref.edit().putString("schedule",value).commit();
+  return value.equals(pref.getString(SCHEDULE,EMPTY))||pref.edit().putString(SCHEDULE,value).commit();
  }
 
  private static JSONArray encode(List<PlannerQueue.Entry> rows,boolean withReceipts)throws Exception{
@@ -209,13 +363,13 @@ final class PlannerReminders {
   return data;
  }
 
- private static List<PlannerQueue.Entry> parse(String text,boolean withReceipts)throws Exception{
+ private static List<PlannerQueue.Entry> parse(String text,boolean withReceipts,Set<String> history)throws Exception{
   if(text==null||text.length()>350_000)throw new IllegalArgumentException("Planner snapshot size");
   JSONObject root=new JSONObject(text);
   Object version=root.get("version");
   if(!(version instanceof Number)||((Number)version).doubleValue()!=1)throw new IllegalArgumentException("Planner version");
   JSONArray data=root.getJSONArray("entries");
-  if(data.length()>PlannerQueue.MAX_ENTRIES)throw new IllegalArgumentException("Planner entry limit");
+  if(data.length()>PlannerQueue.MAX_ENTRIES+(withReceipts?1:0))throw new IllegalArgumentException("Planner entry limit");
   List<PlannerQueue.Entry> rows=new ArrayList<>();
   Set<String> ids=new HashSet<>();
   for(int i=0;i<data.length();i++){
@@ -224,8 +378,13 @@ final class PlannerReminders {
    Object number=item.get("at");
    if(!(number instanceof Number))throw new IllegalArgumentException("Planner time");
    long at=((Number)number).longValue();
-   if(((Number)number).doubleValue()!=at||at<=0||at>=PlannerQueue.MAX_AT||!id.matches("[a-z0-9-]{1,64}")||!ids.add(id)
+   if(((Number)number).doubleValue()!=at||at<=0||at>=PlannerQueue.MAX_AT||(!id.matches("[a-z0-9-]{1,64}")&&!(withReceipts&&PlannerQueue.TEST_ID.equals(id)))||!ids.add(id)
      ||title.trim().isEmpty()||title.length()>80||title.chars().anyMatch(ch->ch<32||ch==127)||note.length()>400)throw new IllegalArgumentException("Planner entry");
+   if(history!=null&&item.has("historical")){
+    Object historical=item.get("historical");
+    if(!(historical instanceof Boolean))throw new IllegalArgumentException("Planner history type");
+    if(Boolean.TRUE.equals(historical))history.add(id);
+   }
    rows.add(new PlannerQueue.Entry(id,title,note,at,withReceipts&&item.optBoolean("delivered")));
   }
   return rows;
