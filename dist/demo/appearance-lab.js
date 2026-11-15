@@ -74,7 +74,7 @@ export function setupAppearanceLab({getPrefs,updatePrefs,getCourses=()=>[],getPr
   const image=wallpaper?getComputedStyle(wallpaper).backgroundImage:'none';preview.style.backgroundImage=image;
   preview.style.backgroundPosition='50% '+prefs.position+'%';grid.replaceChildren();
   const courses=getPreviewBlocks(),seenSlots=new Map();
-  for(const c of courses){const day=Math.max(1,Math.min(7,Number(c.day)||1)),row=(seenSlots.get(day)||0)+1;if(row>2)continue;seenSlots.set(day,row);const card=document.createElement('div');card.className='lab-preview-course tone-'+(['blue','green','purple','orange','rose','slate'].includes(c.tone)?c.tone:'blue');card.dataset.courseName=c.name;card.style.gridColumn=day;card.style.gridRow=row;card.title=c.name;const title=document.createElement('strong');title.textContent=c.name;const sub=document.createElement('span');sub.textContent='第'+(c.start===c.end?c.start:c.start+'–'+c.end)+'节';card.append(title,sub);grid.append(card);}
+  for(const c of courses){const day=Math.max(1,Math.min(7,Number(c.day)||1)),row=(seenSlots.get(day)||0)+1;if(row>2)continue;seenSlots.set(day,row);const card=document.createElement('div');card.className='lab-preview-course tone-'+(['blue','green','purple','orange','rose','slate'].includes(c.tone)?c.tone:'blue');card.dataset.courseName=c.name;card.style.gridColumn=day;card.style.gridRow=row;card.title=c.name;const title=document.createElement('strong');title.textContent=c.name;const sub=document.createElement('span');sub.textContent=c.location||'地点待定';card.append(title,sub);grid.append(card);}
   if(!courses.length){const empty=document.createElement('span');empty.className='lab-preview-empty';empty.textContent='导入课表后，在这里实时预览';grid.append(empty);}
  }
  function renderStickers(){

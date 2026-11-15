@@ -12,8 +12,9 @@ import {imageStore,recoverRestore} from './assets.js';
 import {setupPackages,maybeCreateUpgradeBackup,recoverPlannerRestore} from './packages-ui.js';
 import {setupPoster} from './poster.js';
 import {setupUpdates} from './updates-ui.js';
+import {APP_VERSION} from '../core/updates.js';
 import {validateAppearance,DEFAULT_APPEARANCE,migrateAppearance060} from '../core/appearance.js';
-let startupRecoveryError='',plannerRestorePending=false;try{await recoverRestore();plannerRestorePending=!await recoverPlannerRestore();if(plannerRestorePending)startupRecoveryError='安卓日程恢复尚待登记，可在日程页重试。';await recoverTimetableImport();await maybeCreateUpgradeBackup('0.8.0');}catch(e){startupRecoveryError=e.message;console.warn('本机恢复与升级保护',e);}
+let startupRecoveryError='',plannerRestorePending=false;try{await recoverRestore();plannerRestorePending=!await recoverPlannerRestore();if(plannerRestorePending)startupRecoveryError='安卓日程恢复尚待登记，可在日程页重试。';await recoverTimetableImport();await maybeCreateUpgradeBackup(APP_VERSION);}catch(e){startupRecoveryError=e.message;console.warn('本机恢复与升级保护',e);}
 import {currentSchool} from '../core/schools.js';
 import {setupSchools} from './schools-ui.js';
 import {setupStudio,readPersonal} from './studio.js';
@@ -58,12 +59,52 @@ function moveChanges(){try{return readMoves();}catch(error){notify(error.message
 function allCourses(){return applyMoves(effectiveCourses(rawCourses(),settings,localChanges(),currentSchool().id),settings,moveChanges(),currentSchool().id);}
 function updateAppearance(patch){prefs=validateAppearance({...prefs,...patch});applyPrefs();savePrefs();}
 
-function renderWeek(courses,now){const start=addDays(settings.startDate,(week-1)*7),days=weekend?7:5;
-$('#header-subtitle').textContent=view==='planner'?'个人安排 · 本机提醒':settings.term;$('#week-title').textContent=`第 ${week} 周`;$('#week-range').textContent=`${start.getMonth()+1}月${start.getDate()}日 — ${addDays(start,6).getMonth()+1}月${addDays(start,6).getDate()}日`;$('.rail-item b').textContent=String(week).padStart(2,'0');$('#prev').disabled=week<=1;$('#next').disabled=week>=settings.totalWeeks;$('#source-chip').innerHTML=icon(prefs.source==='existing'?'folder':'sparkles')+(prefs.source==='existing'?'我的课表 · 已保存到本机':'演示课表');$('#weekends').textContent=weekend?'隐藏周末':'显示周末';
-const list=blocksFor(courses,week,null,settings.times),grid=$('#timetable'),heading=$('#date-heading');grid.style.setProperty('--days',days);heading.style.setProperty('--days',days);grid.classList.toggle('weekend',weekend);heading.classList.toggle('weekend',weekend);let head=`<div class="month-heading">${start.getMonth()+1}月</div>`;for(let day=1;day<=days;day++){const d=addDays(start,day-1);head+=`<div class="date-day ${dateKey(d)===dateKey(now)?'today':''}"><small>${WEEKDAYS[day-1]}</small><strong>${d.getDate()}</strong></div>`;}heading.innerHTML=head;
-let body='';for(let period=1;period<=12;period++){body+=`<div class="time-slot" data-clock-period="${period}" style="grid-row:${period}">${String(period).padStart(2,'0')}<small>${settings.times[period-1].split('-')[0]}<br>${settings.times[period-1].split('-')[1]}</small></div>`;for(let day=1;day<=days;day++)body+=`<div class="grid-guide" data-clock-period="${period}" data-clock-day="${day}" style="grid-row:${period};grid-column:${day+1}"></div>`;}
-for(const c of list.filter(c=>c.day<=days)){const peers=list.filter(p=>p.day===c.day&&p.start<=c.end&&p.end>=c.start),lane=peers.findIndex(p=>p.sessionKey===c.sessionKey);const time=`${settings.times[c.start-1].split('-')[0]}–${settings.times[c.end-1].split('-')[1]}`;body+=`<button class="course-card tone-${c.tone||'blue'} ${c.cancelled?'cancelled':c.localOverride?'locally-changed':''}" data-course="${E(c.id)}" data-period="${c.period}" data-end="${c.end}" data-day="${c.day}" data-date="${dateKey(addDays(start,c.day-1))}" data-span="${c.end-c.start+1}" data-moved="${Boolean(c.move)}" style="grid-row:${c.start}/span ${c.end-c.start+1};grid-column:${c.day+1};${peers.length>1?`width:calc(${100/peers.length}% - 2px);margin-left:calc(${100*lane/peers.length}%);`:''}" aria-label="${E(c.name+' '+WEEKDAYS[c.day-1]+' 第'+(c.start===c.end?c.start:c.start+'–'+c.end)+'节 '+time)}"><strong>${E(c.name)}</strong><span class="location">${icon('pin')}${E(c.location||'地点待定')}</span><span class="card-time">${c.move?'调课 · ':''}${c.cancelled?'停课':c.localOverride?'仅本次 · ':''}${c.cancelled?'':'第'+(c.start===c.end?c.start:c.start+'–'+c.end)+'节'}</span></button>`;}
-grid.innerHTML=body;const hiddenWeekend=list.some(c=>c.day>5)&&!weekend;$('#schedule-hint').textContent=hiddenWeekend?'本周有周末课程，点击上方「显示周末」':'长按课块调课 · 轻触查看详情';}
+function renderWeek(courses,now){
+ const start=addDays(settings.startDate,(week-1)*7),end=addDays(start,6),days=weekend?7:5;
+ $('#header-subtitle').textContent=view==='planner'?'个人安排 · 本机提醒':settings.term;
+ $('#week-title').textContent=`第 ${week} 周`;
+ $('#week-range').textContent=`${start.getMonth()+1}月${start.getDate()}日–${end.getMonth()+1}月${end.getDate()}日`;
+ $('.rail-item b').textContent=String(week).padStart(2,'0');
+ $('#prev').disabled=week<=1;
+ $('#next').disabled=week>=settings.totalWeeks;
+ $('#source-chip').innerHTML=icon(prefs.source==='existing'?'folder':'sparkles')+(prefs.source==='existing'?'我的课表 · 已保存到本机':'演示课表');
+ $('#weekends').textContent=weekend?'隐藏周末':'显示周末';
+
+ const list=blocksFor(courses,week,null,settings.times),grid=$('#timetable'),heading=$('#date-heading');
+ for(const element of [grid,heading]){
+  element.style.setProperty('--days',days);
+  element.classList.toggle('weekend',weekend);
+ }
+ let head=`<div class="month-heading">${start.getMonth()+1}月</div>`;
+ for(let day=1;day<=days;day++){
+  const d=addDays(start,day-1);
+  head+=`<div class="date-day ${dateKey(d)===dateKey(now)?'today':''}"><small>${WEEKDAYS[day-1]}</small><strong>${d.getDate()}</strong></div>`;
+ }
+ heading.innerHTML=head;
+
+ let body='';
+ for(let period=1;period<=12;period++){
+  const [opens,closes]=settings.times[period-1].split('-');
+  body+=`<div class="time-slot" data-clock-period="${period}" style="grid-row:${period}">${String(period).padStart(2,'0')}<small>${opens}<br>${closes}</small></div>`;
+  for(let day=1;day<=days;day++)body+=`<div class="grid-guide" data-clock-period="${period}" data-clock-day="${day}" style="grid-row:${period};grid-column:${day+1}"></div>`;
+ }
+ for(const c of list.filter(c=>c.day<=days)){
+  const peers=list.filter(p=>p.day===c.day&&p.start<=c.end&&p.end>=c.start),lane=peers.findIndex(p=>p.sessionKey===c.sessionKey);
+  const overlap=peers.length>1?`width:calc(${100/peers.length}% - 2px);margin-left:calc(${100*lane/peers.length}%);`:'';
+  const span=c.end-c.start+1,range=c.start===c.end?String(c.start):`${c.start}–${c.end}`;
+  const time=`${settings.times[c.start-1].split('-')[0]}–${settings.times[c.end-1].split('-')[1]}`;
+  const room=c.location||'地点待定';
+  const status=[c.move&&'调课',c.cancelled?'停课':c.localOverride&&'仅本次'].filter(Boolean).join(' · ');
+  const label=[c.name,WEEKDAYS[c.day-1],`第${range}节`,room,time,status].filter(Boolean).join(' ');
+  const state=c.cancelled?'cancelled':c.localOverride?'locally-changed':'';
+  body+=`<button class="course-card tone-${c.tone||'blue'} ${state}" data-course="${E(c.id)}" data-period="${c.period}" data-end="${c.end}" data-day="${c.day}" data-date="${dateKey(addDays(start,c.day-1))}" data-span="${span}" data-moved="${Boolean(c.move)}" style="grid-row:${c.start}/span ${span};grid-column:${c.day+1};${overlap}" aria-label="${E(label)}">
+   <strong>${E(c.name)}</strong><span class="location">${E(room)}</span>${status?`<span class="card-time">${E(status)}</span>`:''}
+  </button>`;
+ }
+ grid.innerHTML=body;
+ const hiddenWeekend=list.some(c=>c.day>5)&&!weekend;
+ $('#schedule-hint').textContent=hiddenWeekend?'本周有周末课程，点击上方「显示周末」':'长按课块调课 · 轻触查看详情';
+}
 function render(){
  const now=new Date(),courses=allCourses();liveDate=dateKey(now);
  renderWeek(courses,now);renderToday(now,courses);renderCourseList();syncCompanion();studio?.refresh();
@@ -124,7 +165,7 @@ function showSourceOccurrence(context){
  if(target)showCourse(target.id,target.period,dateKey(addDays(settings.startDate,(selectedWeek-1)*7+target.day-1)));else showCourse(context.course.id,context.period,occurrence);
 }
 function showBinding(){setView('user');}
-function openWeeks(){$('#week-options').innerHTML=Array.from({length:settings.totalWeeks},(_,i)=>`<button class="${week===i+1?'selected':''}" data-week="${i+1}">第 ${i+1} 周</button>`).join('');openSheet('#week-sheet');}
+function openWeeks(){$('#week-term').textContent=settings.term;$('#week-options').innerHTML=Array.from({length:settings.totalWeeks},(_,i)=>`<button class="${week===i+1?'selected':''}" data-week="${i+1}">第 ${i+1} 周</button>`).join('');openSheet('#week-sheet');}
 function selectWeek(next){if(next===week)return;week=next;renderWeekSelection();}
 function changeWeek(delta){selectWeek(Math.max(1,Math.min(settings.totalWeeks,week+delta)));}
 const accents=['#368bc1','#579b8e','#8174b8','#c28b68','#546f98'];$('#accent-options').innerHTML=accents.map((color,i)=>`<button data-accent="${color}" style="--swatch:${color}" aria-label="${['天空蓝','薄荷绿','雾紫色','暖杏色','灰蓝色'][i]}主色"></button>`).join('');

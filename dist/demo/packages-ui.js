@@ -1,3 +1,4 @@
+import {APP_VERSION} from '../core/updates.js';
 import {allowedKey,STATE_KEYS,MAX_PACKAGE,validatePackage,validateTheme,themeFromBackup,mergeTheme} from '../core/packages.js';
 import {readAssets,commitRestore,saveTheme,deleteTheme,recoveryRecord,commitUpgradeSnapshot,writeRecoveryRecord} from './assets.js';
 import {validateAppearance} from '../core/appearance.js';
@@ -8,7 +9,7 @@ export function downloadText(name,text){if(window.CourseCompass?.saveFile){windo
 async function resource(blob){if(!blob)return null;const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});return {type:blob.type,data};}
 function blob(r){if(!r)return null;const text=atob(r.data),bytes=new Uint8Array(text.length);for(let i=0;i<text.length;i++)bytes[i]=text.charCodeAt(i);return new Blob([bytes],{type:r.type});}
 async function decodeAssets(value){async function check(imageBlob){if(!imageBlob)return;const url=URL.createObjectURL(imageBlob);try{const image=new Image();image.src=url;await image.decode();if(image.naturalWidth*image.naturalHeight>60000000)throw Error('备份图片尺寸过大');}finally{URL.revokeObjectURL(url);}}const images={};for(const k of ['wallpaper','original']){images[k]=blob(value.assets[k]);await check(images[k]);}for(const theme of value.themes)await check(blob(theme.wallpaper));return {images,themes:value.themes,history:value.state[IMPORT_HISTORY_KEY]?JSON.parse(value.state[IMPORT_HISTORY_KEY]):null};}
-export async function captureBackup(appVersion='0.8.0'){
+export async function captureBackup(appVersion=APP_VERSION){
  const state={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(allowedKey(k))state[k]=localStorage.getItem(k);}
  const planner=readNativePlanner();if(planner)state[PLANNER_KEY]=JSON.stringify(planner);
  if(window.CourseCompass?.getWidgetConfigs){const widgets=JSON.parse(window.CourseCompass.getWidgetConfigs());if(widgets.length)state['course-compass.widget-presets.v1']=JSON.stringify(widgets);}
