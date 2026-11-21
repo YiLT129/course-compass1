@@ -10,7 +10,7 @@
 .planner-view{--plan-panel:rgba(248,253,255,.88);--plan-tint:rgba(var(--accent-rgb),.10);--plan-accent-ink:var(--text);max-width:740px;margin:0 auto;padding:0 0 14px;display:grid;gap:15px;color:var(--text)}
 .dark .planner-view{--plan-panel:rgba(24,43,58,.92);--plan-tint:rgba(var(--accent-rgb),.20)}
 .planner-view[hidden],.planner-view [hidden]{display:none!important}
-body[data-view=planner] .fun-widget-button,body[data-view=planner] .room-shortcut{display:none}
+body[data-view=planner] .fun-widget-button{display:none}
 .planner-calendar,.planner-next-card,.planner-status-card,.planner-permissions{min-width:0;background:var(--plan-panel);border:1px solid var(--glass-edge);border-radius:20px}
 .planner-calendar{padding:10px}
 .planner-week-bar{display:grid;grid-template-columns:36px minmax(0,1fr) 36px auto;gap:4px;align-items:center;margin:0 0 8px}

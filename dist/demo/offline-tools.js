@@ -42,23 +42,27 @@ export function setupOfflineTools({get,notify=()=>{},openSheet}){
  $('#draw-pick').onclick=()=>{try{const list=draw.lists.find(x=>x.id===draw.selectedId);if(!list)throw Error('先保存一个列表');$('#draw-result').textContent=drawItem(list.items);$('#draw-error').textContent=list.items.length===1?'列表只有一个选项，因此结果就是它。':'';}catch(error){$('#draw-error').textContent=error.message;}};
  $('#draw-clear-result').onclick=()=>{$('#draw-result').textContent='点「抽一个」开始';$('#draw-error').textContent='';};
 
- function renderRoom(){clearTimeout(roomTimer);if(!$('#room-sheet').open)return;const now=new Date(),{courses,settings}=get(),date=addDays(now,roomOffset),clock=scheduleClock(courses,settings,now);roomList=roomCards(courses,settings,date);
-  if(!roomManual){const active=clock.current[0]||clock.next[0];roomIndex=active&&active.date===dateKey(date)?Math.max(0,roomList.findIndex(c=>c.id===active.id&&active.period>=c.start&&active.period<=c.end)):0;}
-  roomIndex=Math.max(0,Math.min(roomList.length-1,roomIndex));$('#room-date').textContent=(roomOffset===0?'今天':'明天')+' · '+dateKey(date)+' '+weekdays[(date.getDay()+6)%7];$('#room-today').classList.toggle('selected',roomOffset===0);$('#room-tomorrow').classList.toggle('selected',roomOffset===1);
+ function renderRoom(target){clearTimeout(roomTimer);if(!$('#room-sheet').open)return;const now=new Date(),{courses,settings}=get(),date=addDays(now,roomOffset),clock=scheduleClock(courses,settings,now);roomList=roomCards(courses,settings,date);
+  if(!roomManual){const active=target||clock.current[0]||clock.next[0];roomIndex=active&&active.date===dateKey(date)?Math.max(0,roomList.findIndex(c=>c.id===active.id&&active.period>=c.start&&active.period<=c.end)):0;}
+  roomIndex=Math.max(0,Math.min(roomList.length-1,roomIndex));$('#room-date').textContent=(roomOffset===0?'今天 · ':roomOffset===1?'明天 · ':'')+dateKey(date)+' '+weekdays[(date.getDay()+6)%7];$('#room-today').classList.toggle('selected',roomOffset===0);$('#room-tomorrow').classList.toggle('selected',roomOffset===1);
   const c=roomList[roomIndex];if(c){const current=clock.current.some(x=>x.id===c.id&&x.date===c.date&&x.period>=c.start&&x.period<=c.end),next=clock.next.some(x=>x.id===c.id&&x.date===c.date&&x.period>=c.start&&x.period<=c.end),first=clock.today.find(x=>x.id===c.id&&x.period===c.start),last=clock.today.find(x=>x.id===c.id&&x.period===c.end),inBlock=first&&last&&now.getTime()>=first.startsAt&&now.getTime()<last.endsAt,status=c.cancelled?'这堂课已停课':current?'正在上课':roomOffset===0&&inBlock&&clock.onBreak?'课间休息':next?'下一节':roomOffset===1?'明天的课程':last&&now.getTime()>=last.endsAt?'已结束':'待上课';
    $('#room-content').innerHTML=`<div class="room-status">${status}</div><strong class="room-location">${E(c.location||'地点待定')}</strong><h3>${E(c.name)}</h3><p>第${c.start===c.end?c.start:c.start+'–'+c.end}节 · ${c.time}</p>${c.teacher?`<small>${E(c.teacher)}</small>`:''}`;
-  }else{const next=clock.next[0];$('#room-content').innerHTML=`<div class="room-empty">${roomOffset===0?'今天':'明天'}没有排课</div><p>${next?'下一次：'+E(next.date+' '+next.time+' · '+next.name+' · '+(next.location||'地点待定')):'未来7天没有课程'}</p>`;}
+  }else{const next=clock.next[0];$('#room-content').innerHTML=`<div class="room-empty">${roomOffset===0?'今天':roomOffset===1?'明天':'当天'}没有排课</div><p>${next?'下一次：'+E(next.date+' '+next.time+' · '+next.name+' · '+(next.location||'地点待定')):'未来7天没有课程'}</p>`;}
   $('#room-count').textContent=roomList.length?`${roomIndex+1} / ${roomList.length}`:'—';$('#room-prev').disabled=roomIndex<=0;$('#room-next').disabled=roomIndex>=roomList.length-1;
   if(!document.hidden){const stamp=now.getTime(),changes=[stamp+60000-stamp%60000,...clock.current.map(c=>c.endsAt),...clock.next.map(c=>c.startsAt)].filter(x=>x>stamp);roomTimer=setTimeout(renderRoom,Math.max(80,Math.min(...changes)-stamp+30));}
  }
- function openRoom(){roomOffset=0;roomIndex=0;roomManual=false;openSheet('#room-sheet');renderRoom();}
+ function openRoom(session){
+  const today=new Date();
+  roomOffset=session?[0,1,2,3,4,5,6,7].find(offset=>dateKey(addDays(today,offset))===session.date)??0:0;
+  roomIndex=0;roomManual=false;
+  openSheet('#room-sheet');renderRoom(session);
+ }
  function roomStep(delta){roomManual=true;roomIndex+=delta;renderRoom();}
  $('#room-today').onclick=()=>{roomOffset=0;roomManual=false;renderRoom();};$('#room-tomorrow').onclick=()=>{roomOffset=1;roomManual=false;renderRoom();};$('#room-prev').onclick=()=>roomStep(-1);$('#room-next').onclick=()=>roomStep(1);$('#room-sheet').addEventListener('close',()=>clearTimeout(roomTimer));
  let swipe=null;$('#room-content').addEventListener('pointerdown',e=>{swipe={x:e.clientX,y:e.clientY};});$('#room-content').addEventListener('pointerup',e=>{if(!swipe)return;const dx=e.clientX-swipe.x,dy=e.clientY-swipe.y;swipe=null;if(Math.abs(dx)>65&&Math.abs(dx)>Math.abs(dy)*1.5)roomStep(dx<0?1:-1);});$('#room-content').addEventListener('pointercancel',()=>swipe=null);
  document.addEventListener('visibilitychange',()=>{clearTimeout(roomTimer);if(!document.hidden&&$('#room-sheet').open)renderRoom();});
  const entries=[['compare','离线对照朋友课表','两份课表 · 共同空闲'],['room-card','下一节教室','大字卡片 · 今天与明天'],['draw-box','本地抽签盒','自建列表 · 抽一个']];
  for(const selector of ['#menu-sheet','#user-view']){const host=$(selector);if(!host)continue;const section=document.createElement('section');section.className='offline-tools-entries';section.setAttribute('aria-label','离线小工具');section.innerHTML=entries.map(([action,title,sub])=>`<button class="action-row" type="button" data-action="${action}"><span class="offline-entry-symbol" aria-hidden="true">${action==='compare'?'▦':action==='room-card'?'⌖':'◇'}</span><span>${title}<small>${sub}</small></span><span aria-hidden="true">›</span></button>`).join('');if(selector==='#menu-sheet')host.querySelector('[data-action="updates"]')?.before(section);else host.append(section);}
- if($('#live-status')){const button=document.createElement('button');button.id='room-shortcut';button.type='button';button.className='room-shortcut';button.dataset.action='room-card';button.textContent='下一节教室 ↗';$('#live-status').after(button);}
  document.addEventListener('click',event=>{const action=event.target.closest('[data-action]')?.dataset.action;if(action==='compare')openCompare();else if(action==='room-card')openRoom();else if(action==='draw-box'){drawEditingNew=false;renderDraw();openSheet('#draw-sheet');}});
  function checkHash(){if(location.hash!=='#room')return;history.replaceState(history.state,'',location.pathname+location.search);openRoom();}window.addEventListener('hashchange',checkHash);queueMicrotask(checkHash);
  renderDraw();return {openRoom,openCompare,refresh(){if($('#room-sheet').open)renderRoom();if($('#compare-sheet').open)renderCompare();}};

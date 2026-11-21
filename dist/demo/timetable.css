@@ -81,6 +81,14 @@ body[data-view="week"] .app-canvas {
   scroll-padding-block-start: calc(var(--timetable-date-height) + 4px);
 }
 
+body[data-view="week"] #source-chip[data-source="existing"] {
+  display: none;
+}
+
+#weekends {
+  margin-inline-start: auto;
+}
+
 #date-heading {
   position: sticky;
   top: 0;
@@ -99,6 +107,17 @@ body[data-view="week"] .app-canvas {
   min-height: 36px;
   gap: 1px;
   color: var(--timetable-date-ink);
+  border-radius: 8px;
+  touch-action: manipulation;
+}
+
+#date-heading .date-day:active {
+  background: rgba(var(--accent-rgb), .13);
+}
+
+#date-heading .date-day:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 #date-heading .month-heading {
@@ -149,6 +168,104 @@ body[data-view="week"] .app-canvas {
 #timetable .course-card:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+.day-overview-sheet[open] {
+  display: flex;
+  flex-direction: column;
+  max-height: 76dvh;
+  padding-inline: clamp(14px, 4vw, 22px);
+}
+
+.day-overview-sheet .sheet-title {
+  margin-bottom: 12px;
+}
+
+.day-overview-sheet .sheet-title h2 {
+  margin: 0;
+}
+
+#day-overview-list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px;
+  margin: 0;
+  list-style: none;
+}
+
+#day-overview-list li {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+#day-overview-list li + li {
+  margin-top: 8px;
+}
+
+.day-overview-time {
+  display: grid;
+  gap: 4px;
+  padding-block: 10px;
+  color: var(--text);
+  font-size: .875rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.day-overview-time small {
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 500;
+}
+
+.day-overview-entry {
+  display: grid;
+  width: 100%;
+  min-height: 52px;
+  gap: 4px;
+  justify-items: start;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border-inline-start: 2px solid var(--accent);
+  background: rgba(var(--accent-rgb), .09);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.day-overview-entry[data-plan-edit] {
+  border-inline-start-color: #8b74bf;
+  background: rgba(139, 116, 191, .10);
+}
+
+.day-overview-entry strong {
+  font-size: .9375rem;
+  line-height: 1.4;
+}
+
+.day-overview-cancelled strong {
+  text-decoration: line-through;
+}
+
+.day-overview-entry small {
+  color: var(--muted);
+  font-size: .8125rem;
+  line-height: 1.4;
+}
+
+.day-overview-status {
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 600;
+}
+
+.day-overview-empty {
+  margin: 8px 0 12px;
+  color: var(--muted);
+  font-size: .875rem;
 }
 
 @media (max-width: 760px) {

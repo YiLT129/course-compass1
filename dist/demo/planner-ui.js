@@ -400,5 +400,5 @@ export function setupPlanner({dialogs,notify,setView,restorePending=false,recove
  }
  window.addEventListener('hashchange',followLink);
  reload();followLink();
- return {reload:()=>{restorePending=false;reload({restored:true});},blockRestore:()=>{restorePending=true;permissionCopy();draw();}};
+ return {getModel:()=>state,reload:()=>{restorePending=false;reload({restored:true});},blockRestore:()=>{restorePending=true;permissionCopy();draw();}};
 }

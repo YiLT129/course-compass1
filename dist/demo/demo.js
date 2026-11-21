@@ -4,6 +4,7 @@ import {mountOfflineToolDialogs,setupOfflineTools} from './offline-tools.js';
 import {setupScreenshotImport} from './screenshot-import.js';
 import {mountPlannerDialogs,setupPlanner} from './planner-ui.js';
 import {setupLiveCapsule} from './live-capsule.js';
+import {setupDayOverview} from './day-overview.js';
 import {setupAppearanceLab} from './appearance-lab.js';
 import {setupOverrides} from './overrides-ui.js';
 import {effectiveCourses,readOverrides} from '../core/overrides.js';
@@ -40,7 +41,7 @@ const defaultPrefs=DEFAULT_APPEARANCE;
 let prefs={...defaultPrefs};try{prefs=validateAppearance(JSON.parse(localStorage.getItem('course-compass.demo.prefs')||'{}'));}catch{}
 const wallpapers={sky:'linear-gradient(135deg,#dcebf0,#dceee7 50%,#e8edf2)',mint:'linear-gradient(135deg,#d7eadc,#e8efdb 60%,#d1e6dc)',dusk:'linear-gradient(135deg,#f2ddd7,#f7e8ce 55%,#eddde6)',night:'linear-gradient(135deg,#1b344e,#254f5e 55%,#2d4058)'};
 let data=sample,settings=settingsDefault,view='week',week=Math.min(16,Math.max(1,weekAt(settings.startDate))),weekend=prefs.weekend,toastTimer,customURL,activeCourse,simStep=0;
-let studio,appearanceLab,liveCapsule,overridesUI,movesUI,offlineTools;
+let studio,appearanceLab,liveCapsule,dayOverview,overridesUI,movesUI,offlineTools;
 let liveTimer=0,liveDate=dateKey(new Date()),overridesError='';
 let personal=[];try{personal=JSON.parse(localStorage.getItem('course-compass.demo.personal')||'[]').map((c,i)=>({...validateCourse(c,i),personal:true,tone:'slate'}));}catch{}
 const toneMap={mint:'green',blue:'blue',peach:'orange',purple:'purple',rose:'rose',yellow:'orange'};
@@ -49,7 +50,7 @@ function savePrefs(){try{localStorage.setItem('course-compass.demo.prefs',JSON.s
 mountMoveDialog();mountOfflineToolDialogs();
 const dialogs=setupDialogNavigation({motion:true,onRootBack:()=>{if(studio?.finishEditing())return true;if(view==='week')return false;setView('week');return true;}});
 function closeSheets(){dialogs.closeAll();}
-function openSheet(id){const parent=dialogs.top()?.id;dialogs.open(id,{nested:parent==='menu-sheet'||(parent==='appearance-sheet'&&id==='#crop-sheet')||(parent==='table-sheet'&&id==='#import-sheet')||(parent==='themes-sheet'&&id==='#backup-sheet')});}
+function openSheet(id){const parent=dialogs.top()?.id;dialogs.open(id,{nested:parent==='menu-sheet'||(parent==='appearance-sheet'&&id==='#crop-sheet')||(parent==='table-sheet'&&id==='#import-sheet')||(parent==='themes-sheet'&&id==='#backup-sheet')||(parent==='day-overview-sheet'&&id==='#detail-sheet')});}
 function applyPrefs(){const root=document.documentElement;root.style.setProperty('--accent',prefs.accent);const rgb=[1,3,5].map(i=>parseInt(prefs.accent.slice(i,i+2),16));root.style.setProperty('--accent-rgb',rgb.join(','));root.style.setProperty('--blur',`${prefs.blur}px`);root.style.setProperty('--shade',prefs.shade/100);root.style.setProperty('--card-alpha',prefs.opacity/100);root.style.setProperty('--position',`${prefs.position}%`);document.body.dataset.font=prefs.font;$('#appearance-font').value=prefs.font;$('#appearance-haptics').checked=prefs.haptics;document.body.classList.toggle('dark',prefs.dark);$('#dark-switch').classList.toggle('on',prefs.dark);if(prefs.wallpaper!=='custom'){root.style.setProperty('--wallpaper',wallpapers[prefs.wallpaper]||wallpapers.sky);$('#wallpaper').classList.remove('custom');}for(const name of ['blur','shade','opacity','position']){$('#'+name).value=prefs[name];$('#'+name+'-value').value=prefs[name]+(name==='blur'?' px':'%');}$$('[data-wallpaper]').forEach(b=>b.classList.toggle('active',prefs.wallpaper===b.dataset.wallpaper));$$('[data-accent]').forEach(b=>b.classList.toggle('selected',b.dataset.accent===prefs.accent));document.querySelector('meta[name="theme-color"]').content=prefs.accent;appearanceLab?.refresh();liveCapsule?.refresh();}
 function useExisting(silent=false){if(!silent)closeSheets();try{migrateSchoolTimes();const text=localStorage.getItem('course-compass.v1');if(!text)throw Error('此浏览器还没有课表，请先在原版导入，或查看演示课表。');const actual=validateEnvelope(JSON.parse(text));data=actual.courses.map(c=>({...c,tone:toneMap[c.color]||'blue'}));settings=actual.settings;prefs.source='existing';week=Math.max(1,Math.min(settings.totalWeeks,weekAt(settings.startDate)));savePrefs();render();if(!silent)notify('已读取本机课表，原版数据保持原样。');return true;}catch(error){if(!silent)notify(error.message);return false;}}
 function useSample(){data=sample;settings=settingsDefault;prefs.source='sample';week=Math.max(1,Math.min(16,weekAt(settings.startDate)));savePrefs();render();closeSheets();notify('已切换为演示课表');}
@@ -67,6 +68,7 @@ function renderWeek(courses,now){
  $('.rail-item b').textContent=String(week).padStart(2,'0');
  $('#prev').disabled=week<=1;
  $('#next').disabled=week>=settings.totalWeeks;
+ $('#source-chip').dataset.source=prefs.source;
  $('#source-chip').innerHTML=icon(prefs.source==='existing'?'folder':'sparkles')+(prefs.source==='existing'?'我的课表 · 已保存到本机':'演示课表');
  $('#weekends').textContent=weekend?'隐藏周末':'显示周末';
 
@@ -78,7 +80,8 @@ function renderWeek(courses,now){
  let head=`<div class="month-heading">${start.getMonth()+1}月</div>`;
  for(let day=1;day<=days;day++){
   const d=addDays(start,day-1);
-  head+=`<div class="date-day ${dateKey(d)===dateKey(now)?'today':''}"><small>${WEEKDAYS[day-1]}</small><strong>${d.getDate()}</strong></div>`;
+  const key=dateKey(d),today=key===dateKey(now),label=`${d.getMonth()+1}月${d.getDate()}日 ${WEEKDAYS[day-1]}`;
+  head+=`<button type="button" class="date-day ${today?'today':''}" data-overview-date="${key}" aria-haspopup="dialog" aria-controls="day-overview-sheet" aria-label="${label}，查看当天安排"${today?' aria-current="date"':''}><small>${WEEKDAYS[day-1]}</small><strong>${d.getDate()}</strong></button>`;
  }
  heading.innerHTML=head;
 
@@ -108,7 +111,7 @@ function renderWeek(courses,now){
 function render(){
  const now=new Date(),courses=allCourses();liveDate=dateKey(now);
  renderWeek(courses,now);renderToday(now,courses);renderCourseList();syncCompanion();studio?.refresh();
- if(view==='user')userPage.render();offlineTools?.refresh();
+ if(view==='user')userPage.render();offlineTools?.refresh();dayOverview?.refresh();
 }
 function renderWeekSelection(){
  const now=new Date();if(liveDate!==dateKey(now)){render();return;}
@@ -194,10 +197,12 @@ const dataTools=setupDataTools({get:()=>({courses:data,settings,demo:prefs.sourc
 setupSchools({notify,openSheet});
 async function refreshAppearance(){prefs=validateAppearance(JSON.parse(localStorage.getItem('course-compass.demo.prefs')||'{}'));applyPrefs();if(prefs.wallpaper==='custom'){const photo=await imageStore('get');if(photo)showCustom(photo);}studio?.reload();render();}
 const planner=setupPlanner({dialogs,notify,setView,restorePending:plannerRestorePending,recoverPlannerRestore});
+dayOverview=setupDayOverview({dialogs,read:()=>({courses:allCourses(),settings,plan:planner.getModel()})});
 setupPackages({notify,openSheet,refreshAppearance,afterRestore:planner.reload,onPendingPlannerRestore:planner.blockRestore});setupPoster({get:()=>({courses:allCourses().filter(c=>!c.cancelled),settings,week,weekend}),notify,openSheet});setupUpdates({notify,openSheet});
 studio=setupStudio({get:()=>({courses:allCourses(),settings}),notify,openSheet,closeSheets,sync:syncCompanion});
 appearanceLab=setupAppearanceLab({getPrefs:()=>prefs,updatePrefs:updateAppearance,getCourses:rawCourses,getPreviewBlocks:()=>blocksFor(allCourses(),week,null,settings.times),openSheet,notify,onPersonalChange:()=>studio?.reload()});
-liveCapsule=setupLiveCapsule({getPrefs:()=>prefs,updatePrefs:updateAppearance,onOpenSession:c=>showCourse(c.id,c.period,c.date)});
+liveCapsule=setupLiveCapsule({getPrefs:()=>prefs,updatePrefs:updateAppearance,onOpenSession:c=>showCourse(c.id,c.period,c.date),
+ onOpenRoom:session=>offlineTools?.openRoom(session),roomIcon:icon('pin')});
 overridesUI=setupOverrides({getContext:()=>({settings,schoolId:currentSchool().id}),notify,onChange:context=>{render();showSourceOccurrence(context);}});
 movesUI=setupMoves({getContext:()=>({rawCourses:rawCourses(),courses:allCourses(),settings,schoolId:currentSchool().id,week}),notify,openSheet,onChange:()=>{if(allCourses().some(c=>c.weeks.includes(week)&&c.day>5)){weekend=true;prefs.weekend=true;savePrefs();}render();}});
 offlineTools=setupOfflineTools({get:()=>({courses:allCourses(),settings,week}),notify,openSheet});
